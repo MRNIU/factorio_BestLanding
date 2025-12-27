@@ -1,0 +1,7 @@
+---------------------------------------------------------------------------------------------------
+Version: 1.0.0
+Date: 2025-12-28
+  Changes:
+    - Initial release / 首次发布
+    - Automatically cleans the landing area on new surfaces / 在新表面自动清理着陆区域
+    - Generates planet-specific resources at the landing site / 在着陆点生成该星球的特有资源

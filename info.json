@@ -1,0 +1,13 @@
+{
+    "name": "BestLanding",
+    "version": "1.0.0",
+    "title": "BestLanding",
+    "author": "zhihong",
+    "contact": "zhihong@nzhnb.com",
+    "homepage": "https://github.com/MRNIU/factorio_BestLanding",
+    "description": "The Best Landing",
+    "factorio_version": "2.0",
+    "dependencies": [
+        "base >= 2.0.55"
+    ]
+}
