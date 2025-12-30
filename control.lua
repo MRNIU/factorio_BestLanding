@@ -19,6 +19,10 @@ end
 local function OnSurfaceCreated(event)
     local surface = game.surfaces[event.surface_index]
 
+    if not surface.planet then
+        return
+    end
+
     area_cleaner.clear_center_area(surface)
     generate_resources.generate_resource_planet(surface)
 end
