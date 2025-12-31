@@ -207,14 +207,12 @@ local function generate_resource_nauvis(amount)
         "copper-ore",
         "iron-ore",
         "coal",
-        "iron-ore",
         "stone",
-        "coal",
         "water",
         { name = "crude-oil", amount = amount * 1024 * 512 },
         "uranium-ore",
     }
-    return generate_resources_pattern(surface, { x = -144, y = -224 }, "horizontal",
+    return generate_resources_pattern(surface, { x = -112, y = -224 }, "horizontal",
         { width = 32, height = 64 }, 0,
         resources, amount)
 end

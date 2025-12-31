@@ -1,13 +1,14 @@
 {
     "name": "BestLanding",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "title": "BestLanding",
     "author": "zhihong",
     "contact": "zhihong@nzhnb.com",
     "homepage": "https://github.com/MRNIU/factorio_BestLanding",
-    "description": "The Best Landing",
+    "description": "Clears the landing area and generates resources for a perfect start.",
     "factorio_version": "2.0",
     "dependencies": [
-        "base >= 2.0.55"
+        "base >= 2.0.55",
+        "space-age"
     ]
 }
