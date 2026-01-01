@@ -1,8 +1,6 @@
--- This file is a part of MRNIU/factorio_BestLanding
--- (https://github.com/MRNIU/factorio_BestLanding).
---
--- generate_resources.lua for MRNIU/factorio_BestLanding.
+-- Copyright The MRNIU/factorio_BestLanding Contributors
 -- 资源生成器 - 用于在指定区域内生成指定类型与数量的资源
+
 
 -- 定义地块类型的资源（需要使用set_tiles）
 local tile_resources = {

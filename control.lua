@@ -1,7 +1,4 @@
--- This file is a part of MRNIU/factorio_BestLanding
--- (https://github.com/MRNIU/factorio_BestLanding).
---
--- control.lua for MRNIU/factorio_BestLanding.
+-- Copyright The MRNIU/factorio_BestLanding Contributors
 
 -- 引入区域清理器模块
 local area_cleaner = require("area_cleaner")

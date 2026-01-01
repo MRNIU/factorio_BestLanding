@@ -1,7 +1,4 @@
--- This file is a part of MRNIU/factorio_BestLanding
--- (https://github.com/MRNIU/factorio_BestLanding).
---
--- area_cleaner.lua for MRNIU/factorio_BestLanding.
+-- Copyright The MRNIU/factorio_BestLanding Contributors
 -- 区域清理器 - 用于清空指定区域内的所有实体并替换地表
 
 --------------------------------------------------------------------------------------

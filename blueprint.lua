@@ -1,7 +1,4 @@
--- This file is a part of MRNIU/factorio_BestLanding
--- (https://github.com/MRNIU/factorio_BestLanding).
---
--- blueprint.lua for MRNIU/factorio_BestLanding.
+-- Copyright The MRNIU/factorio_BestLanding Contributors
 
 local blueprint = {}
 
