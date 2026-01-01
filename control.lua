@@ -4,7 +4,7 @@
 local area_cleaner = require("area_cleaner")
 local generate_resources = require("generate_resources")
 local blueprints = require("blueprint")
-
+local legendary_spider = require("legendary_spider")
 
 --------------------------------------------------------------------------------------
 -- Apply blueprint to the given surface
@@ -130,6 +130,7 @@ local function OnInit()
     area_cleaner.clear_center_area(game.surfaces.nauvis)
     generate_resources.generate_resource_planet(game.surfaces.nauvis)
     ApplyBlueprints(game.surfaces.nauvis)
+    legendary_spider.spawn_legendary_spider(game.surfaces.nauvis, { x = 0, y = 0 })
 end
 
 --------------------------------------------------------------------------------------
@@ -143,6 +144,7 @@ local function OnSurfaceCreated(event)
 
     area_cleaner.clear_center_area(surface)
     generate_resources.generate_resource_planet(surface)
+    legendary_spider.spawn_legendary_spider(surface)
 end
 
 --------------------------------------------------------------------------------------
