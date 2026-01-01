@@ -144,7 +144,7 @@ local function OnSurfaceCreated(event)
 
     area_cleaner.clear_center_area(surface)
     generate_resources.generate_resource_planet(surface)
-    legendary_spider.spawn_legendary_spider(surface)
+    legendary_spider.spawn_legendary_spider(surface, { x = 0, y = 0 })
 end
 
 --------------------------------------------------------------------------------------

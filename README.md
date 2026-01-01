@@ -9,11 +9,13 @@ Automatically cleans the landing area and generates planet-specific resources wh
 - **Resource Generation**: Generates planet-specific resource patches near the landing site to ensure a smooth start.
 - **Multi-surface Support**: Works on any newly created surface (planet).
 - **Starter Blueprints**: Automatically places a starter blueprint to help jumpstart your base.
+- **Legendary Spidertron**: Spawns a fully equipped legendary spidertron with essential items.
 
 - **地表清理**：自动移除着陆区域周围的树木、岩石和悬崖，提供干净的建筑空间。
 - **资源生成**：在着陆点附近生成该星球特有的资源矿脉，确保顺利开局。
 - **多表面支持**：适用于任何新创建的表面（星球）。
 - **开局黑盒**：自动放置开局蓝图，帮助你快速启动基地。
+- **传奇机甲**：生成一个全装备的传奇蜘蛛机甲，并附带基础物品。
 
 ## Disclaimer / 声明
 

@@ -164,10 +164,17 @@ local preset_legendary_items = {
 local function spawn_legendary_spider(surface, position, force)
     if not surface or not position then return end
 
+    -- 尝试找到一个不碰撞的位置
+    local safe_position = surface.find_non_colliding_position("spidertron", position, 128, 1)
+    if not safe_position then
+        game.print("BestLanding: Warning - Could not find clear space for spider at " .. position.x .. "," .. position.y)
+        safe_position = position
+    end
+
     -- 创建传奇蜘蛛机甲
     local spider = surface.create_entity {
         name = "spidertron",
-        position = position,
+        position = safe_position,
         force = force or "player",
         quality = "legendary"
     }
@@ -185,6 +192,8 @@ local function spawn_legendary_spider(surface, position, force)
         if ammo_inventory then
             ammo_inventory.insert({ name = "rocket", count = 400, quality = "legendary" })
         end
+    else
+        game.print("BestLanding: Failed to spawn legendary spider at " .. safe_position.x .. "," .. safe_position.y)
     end
 
     return spider

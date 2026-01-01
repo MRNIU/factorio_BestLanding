@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.1.1
+Date: 2026-01-01
+  Changes:
+    - remove dependency elevated-rails.
+    - Add legendary spidertron with full equipment and items.
+    - 移除对 elevated-rails 的依赖。
+    - 添加全装备和物品的传奇蜘蛛机甲。
+
+---------------------------------------------------------------------------------------------------
 Version: 1.1.0
 Date: 2026-01-01
   Changes:
