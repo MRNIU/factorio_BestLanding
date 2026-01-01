@@ -1,6 +1,6 @@
 {
     "name": "BestLanding",
-    "version": "1.0.2",
+    "version": "1.1.0",
     "title": "BestLanding",
     "author": "zhihong",
     "contact": "zhihong@nzhnb.com",
@@ -9,6 +9,8 @@
     "factorio_version": "2.0",
     "dependencies": [
         "base >= 2.0.55",
-        "space-age"
+        "space-age",
+        "quality",
+        "elevated-rails"
     ]
 }
