@@ -1,4 +1,17 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.1.4
+Date: 2026-04-19
+  Changes:
+    - Added per-planet starter blueprints for Nauvis, Vulcanus, Fulgora, Gleba, Aquilo.
+    - Added Vulcanus Demolisher purge in a 300-tile ring around the landing area.
+    - Fixed force_generate_chunk_requests being called inside the chunk loop; now called once after the full request batch.
+    - Removed unused added_items debug tracking in add_items_to_inventory.
+    - Cleaned up dead .x-or-[1] fallback code paths in area_cleaner.
+    - Replaced dead modulo in generate_resources_pattern with plain ipairs.
+    - Rewrote README in English only.
+    - Added CLAUDE.md with architecture notes, gotchas, and Factorio API references.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.1.2
 Date: 2026-01-01
   Changes:

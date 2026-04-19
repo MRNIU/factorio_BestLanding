@@ -140,11 +140,7 @@ local function generate_resources_pattern(surface, start_position, direction, ar
 
     local success_count = 0
 
-    for i = 1, #resources do
-        -- 循环使用资源列表中的资源
-        local resource_index = ((i - 1) % #resources) + 1
-        local current_resource = resources[resource_index]
-
+    for i, current_resource in ipairs(resources) do
         -- 计算当前区域的位置
         local current_x = start_position.x
         local current_y = start_position.y
@@ -241,11 +237,19 @@ local function generate_resource_gleba(amount)
     local resources = {
         "stone",
         "overgrowth-jellynut-soil",
+        "overgrowth-jellynut-soil",
+        "overgrowth-jellynut-soil",
+        "overgrowth-jellynut-soil",
+        "overgrowth-jellynut-soil",
+        "overgrowth-jellynut-soil",
         "overgrowth-yumako-soil",
-        "gleba-deep-lake",
-        "gleba-deep-lake",
+        "overgrowth-yumako-soil",
+        "overgrowth-yumako-soil",
+        "overgrowth-yumako-soil",
+        "overgrowth-yumako-soil",
+        "overgrowth-yumako-soil"
     }
-    return generate_resources_pattern(surface, { x = -80, y = -224 }, "horizontal",
+    return generate_resources_pattern(surface, { x = -208, y = -192 }, "horizontal",
         { width = 32, height = 64 }, 0,
         resources, amount)
 end

@@ -101,24 +101,17 @@ local function add_items_to_inventory(inventory, items)
         return
     end
 
-    local added_items = {}
-
     for _, item_data in pairs(items) do
         local item_name = item_data.name or item_data[1]
         local item_count = item_data.count or item_data[2] or 1
         local item_quality = item_data.quality or "legendary"
 
         if prototypes.item[item_name] then
-            local legendary_item = {
+            inventory.insert({
                 name = item_name,
                 count = item_count,
                 quality = item_quality
-            }
-
-            local inserted = inventory.insert(legendary_item)
-            if inserted > 0 then
-                table.insert(added_items, item_count .. "x " .. item_quality .. " " .. item_name)
-            end
+            })
         end
     end
 end

@@ -1,41 +1,34 @@
 # Best Landing
 
-Automatically cleans the landing area and generates planet-specific resources when a new planet surface is created.
-当新的星球表面被创建时，自动清理着陆区域并生成该星球的特有资源。
+A Factorio 2.0 mod that cleans up the landing area and seeds planet-appropriate resources whenever you arrive on a new planet surface.
 
-## Features / 功能特性
+## Features
 
-- **Surface Cleaning**: Automatically removes trees, rocks, and cliffs around the landing area to provide a clean building space.
-- **Resource Generation**: Generates planet-specific resource patches near the landing site to ensure a smooth start.
-- **Multi-surface Support**: Works on any newly created surface (planet).
-- **Starter Blueprints**: Automatically places a starter blueprint to help jumpstart your base.
-- **Legendary Spidertron**: Spawns a fully equipped legendary spidertron with essential items.
+- **Landing-area cleanup**: destroys trees, rocks, cliffs, enemies, and existing resources in a 448×448 square around (0,0), then lays a planet-appropriate default tile.
+- **Vulcanus Demolisher purge**: sweeps a 300-tile ring outside the cleared square to remove `segmented-unit` Demolishers whose territories would otherwise still cover the landing zone.
+- **Planet-specific resource seeding**: places ores, fluid sources, and tile resources tuned for each Space Age planet (Nauvis, Vulcanus, Gleba, Fulgora, Aquilo).
+- **Starter blueprints**: each supported planet comes with its own blueprint that is applied on arrival — modules, filters, and fuel embedded in the blueprints are delivered into the revived entities automatically.
+- **Legendary spidertron**: spawns a fully-equipped legendary spidertron pre-loaded with robots, power, defense, ammo, and repair packs at the landing site.
+- **Runs on every new planet**: both on the initial Nauvis spawn and every time `on_surface_created` fires for a new planet surface. Orbital space platforms are skipped.
 
-- **地表清理**：自动移除着陆区域周围的树木、岩石和悬崖，提供干净的建筑空间。
-- **资源生成**：在着陆点附近生成该星球特有的资源矿脉，确保顺利开局。
-- **多表面支持**：适用于任何新创建的表面（星球）。
-- **开局黑盒**：自动放置开局蓝图，帮助你快速启动基地。
-- **传奇机甲**：生成一个全装备的传奇蜘蛛机甲，并附带基础物品。
+## Disclaimer
 
-## Disclaimer / 声明
+Blueprints bundled with this mod come from the Factorio community. All credit belongs to the original blueprint authors.
 
-The blueprints used in this mod are sourced from the internet. All credit goes to the original creators of these blueprints.
-本模组中使用的蓝图来源于互联网。所有荣誉归于这些蓝图的原始创作者。
+## Compatibility
 
-## Compatibility / 兼容性
+- Factorio 2.0.55 or newer.
+- Requires `base`, `space-age`, `quality`.
 
-- **Factorio Version**: 2.0.55+
-- **Dependencies**: base >= 2.0.55, space-age
+## License
 
-## License / 许可证
+MIT — see [LICENSE](LICENSE).
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+## Author
 
-## Author / 作者
+- **NZH** — zhihong@nzhnb.com
+- Repository: <https://github.com/MRNIU/factorio_BestLanding>
 
-- **NZH** - zhihong@nzhnb.com
-- **Project Repository**: https://github.com/MRNIU/factorio_BestLanding
+## Changelog
 
-## Changelog / 更新日志
-
-See [changelog.txt](changelog.txt) for version history.
+See [changelog.txt](changelog.txt).

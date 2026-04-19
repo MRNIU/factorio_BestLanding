@@ -56,17 +56,7 @@ local function ApplyBlueprint(surface, blueprint_string, blueprint_pos, blueprin
             end
 
             if initialized then
-                local chunk_min_x = math.floor(min_x / 32)
-                local chunk_max_x = math.floor(max_x / 32)
-                local chunk_min_y = math.floor(min_y / 32)
-                local chunk_max_y = math.floor(max_y / 32)
-
-                for x = chunk_min_x, chunk_max_x do
-                    for y = chunk_min_y, chunk_max_y do
-                        surface.request_to_generate_chunks({ x * 32, y * 32 }, 0)
-                    end
-                end
-                surface.force_generate_chunk_requests()
+                area_cleaner.clean_blueprint_area(surface, { { min_x, min_y }, { max_x, max_y } })
             end
 
             -- 1. 强制铺设地板
@@ -118,8 +108,10 @@ local function ApplyBlueprints(surface)
     if not blueprints then return end
 
     for _, bp in pairs(blueprints) do
-        if bp.data then
-            ApplyBlueprint(surface, bp.data, bp.pos, bp.direction)
+        if bp.name and surface.name and string.lower(bp.name) == string.lower(surface.name) then
+            if bp.data then
+                ApplyBlueprint(surface, bp.data, bp.pos, bp.direction)
+            end
         end
     end
 end
@@ -144,6 +136,7 @@ local function OnSurfaceCreated(event)
 
     area_cleaner.clear_center_area(surface)
     generate_resources.generate_resource_planet(surface)
+    ApplyBlueprints(surface)
     legendary_spider.spawn_legendary_spider(surface, { x = 0, y = 0 })
 end
 
