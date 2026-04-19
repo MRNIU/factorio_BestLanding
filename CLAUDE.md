@@ -8,10 +8,21 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 `info.json` 声明的依赖：`base >= 2.0.76`、`space-age`、`quality`。本 Mod 仅运行时，覆盖 Space Age 所有五颗行星 surface（`nauvis`、`vulcanus`、`gleba`、`fulgora`、`aquilo`）。
 
+## 兄弟 Mod
+
+本 Mod 是 NZH 维护的开局 Mod 家族的一员：
+
+- [`LegendaryMechStart`](https://github.com/MRNIU/factorio_LegendaryMechStart) — 传奇机甲 + 装备网格 + 初始物品
+- [`LegendaryShipStart`](https://github.com/MRNIU/factorio_LegendaryShipStart) — 预置传奇太空飞船
+- **`BestLanding`（本仓库）** — 着陆区清理 + 行星资源 + 传奇蜘蛛
+- [`nzh_factorio_mod`](https://github.com/MRNIU/nzh_factorio_mod) — 整合包，一键启用上面三个
+
+**如果发现本 Mod 要做的事和兄弟 Mod 重叠了**（比如"玩家背包发放物品" vs `LegendaryMechStart`、"太空平台蓝图" vs `LegendaryShipStart`），先停下问用户，不要在本仓库重复实现。`LegendaryShipStart` 有几乎同样的蓝图应用流水线，涉及蓝图处理时可以参考它——但别跨仓库 require。
+
 ## 常用命令
 
 - **运行 / 迭代**：启动 Factorio，启用本 Mod，开新游戏（或者着陆到新行星触发第二次及以后的清理）。（注：Claude Code 跑在 WSL、Mod 文件通过 Windows 挂载访问，Claude 无法直接启动 Factorio 或 FactorioModDebug；运行验证需要你在 Windows 侧手工操作。）
-- **语法检查**：`luac5.4 -p <file>.lua` 可以对 Lua 文件做 parse-only 校验，快速发现 `end` 缺失 / 括号不匹配等语法问题。不检查语义（undefined global、类型等）。
+- **语法检查 / 预提交**：改完任何 `.lua` 后跑一次 `for f in *.lua; do luac5.4 -p "$f" || break; done`（全 Mod 扫一遍 < 100ms），能抓 `end` 缺失 / 括号不匹配 / 字符串没闭合等语法问题；**不查语义**（undefined global、类型错误等）。提交前养成这个习惯可以避免把纯语法错推到 Mod portal。
 - **调试**：`.vscode/launch.json` 里配好了 [FactorioModDebug](https://marketplace.visualstudio.com/items?itemName=justarandomgeek.factoriomod-debug) 的启动项，追控制流时优先用它。
 - **打包发布**：打包为 `BestLanding_<version>.zip`，压缩包最外层是文件夹本身。版本号必须和 `info.json`、`changelog.txt` 顶条一致。
 - **Changelog 格式**：Factorio 严格格式（99 个 `-`、`Version:`、`Date:`、缩进 `Changes:`），英文。
