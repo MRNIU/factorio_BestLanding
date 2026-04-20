@@ -10,15 +10,25 @@ local spawn_spider    = require("spawn_spider")
 -- 流水线顺序：清理 → 铺资源 → 铺蓝图 → 生成蜘蛛。
 -- 注意：蜘蛛在蓝图之后生成，用 find_non_colliding_position + 多半径 fallback
 -- 绕开蓝图实体。如果蓝图把中心整块占满就只能退到 (0,0)，容 log 显示。
+--
+-- 每个 stage 单独 pcall：单个 stage 抛错只让该 stage 的产物缺失，
+-- 不会让 on_init 整个炸掉（否则新存档会创建失败、用户连菜单都退不回去）
+local function run_stage(name, fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        log(("[BestLanding] stage %s failed: %s"):format(name, tostring(err)))
+    end
+end
+
 local function run_pipeline(surface)
     if not (surface and surface.valid) then return end
     local cfg = planets[surface.name]
     if not cfg then return end
 
-    clean_area.run(surface, cfg)
-    place_resources.run(surface, cfg)
-    apply_blueprint.run(surface)
-    spawn_spider.run(surface)
+    run_stage("clean_area",      clean_area.run,      surface, cfg)
+    run_stage("place_resources", place_resources.run, surface, cfg)
+    run_stage("apply_blueprint", apply_blueprint.run, surface)
+    run_stage("spawn_spider",    spawn_spider.run,    surface)
 end
 
 --------------------------------------------------------------------------------

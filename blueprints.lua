@@ -22,38 +22,23 @@ local Gleba =
 local Aquilo =
 ""
 
--- 蓝图字符串变量
-blueprint =
-{
-    {
-        name = "Nauvis",
-        data = Nauvis,
-        pos = { x = 0, y = 0 },
-        direction = 0,
+-- 按 surface.name (lower-case) 索引：apply_blueprint 直接 O(1) 查表，
+-- 不用线性遍历 + 字符串比较。同名行星支持多蓝图，所以 value 是 list
+blueprint = {
+    nauvis = {
+        { data = Nauvis,   pos = { x = 0, y = 0 }, direction = 0 },
     },
-    {
-        name = "Vulcanus",
-        data = Vulcanus,
-        pos = { x = 0, y = 0 },
-        direction = 0,
+    vulcanus = {
+        { data = Vulcanus, pos = { x = 0, y = 0 }, direction = 0 },
     },
-    {
-        name = "Fulgora",
-        data = Fulgora,
-        pos = { x = 0, y = 0 },
-        direction = 0,
+    fulgora = {
+        { data = Fulgora,  pos = { x = 0, y = 0 }, direction = 0 },
     },
-    {
-        name = "Gleba",
-        data = Gleba,
-        pos = { x = 0, y = 0 },
-        direction = 0,
+    gleba = {
+        { data = Gleba,    pos = { x = 0, y = 0 }, direction = 0 },
     },
-    {
-        name = "Aquilo",
-        data = Aquilo,
-        pos = { x = 0, y = 0 },
-        direction = 0,
+    aquilo = {
+        { data = Aquilo,   pos = { x = 0, y = 0 }, direction = 0 },
     },
 }
 

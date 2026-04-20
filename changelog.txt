@@ -1,4 +1,17 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.2.1
+Date: 2026-04-20
+  Changes:
+    - Wrapped each pipeline stage in pcall so a single stage failure no longer aborts on_init or surface creation.
+    - Disabled build effect smoke and event raising on bulk ore / tree / fluid create_entity calls; cuts visual noise and event broadcast cost during initial seeding.
+    - Skipped tile correction and entity collision pass in the 448x448 default-tile repaint (set_tiles correct_tiles=false, remove_colliding_entities=false); entities are already cleaned beforehand and the interior of the landing zone is uniform.
+    - Cached Gleba tree prototype lookup once per session instead of per planted tile (was ~12000 prototype hash lookups on Gleba).
+    - Switched blueprints table from a linear list to a dict keyed by lowercase surface name; apply_blueprint now does O(1) lookup and supports multiple blueprints per planet.
+    - Unified clean_area interval convention to half-open (matches place_resources.band_area).
+    - Removed dead prototypes.item guard in spawn_spider trunk fill; preset items are guaranteed by hard dependencies.
+    - Removed defensive pcall around tree.tick_grown / tree_stage_index; PlantPrototype guarantees these fields exist.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.2.0
 Date: 2026-04-20
   Changes:

@@ -23,17 +23,18 @@ end
 
 -- Gleba 果树的 prototype 命名：yumako 树是 "yumako-tree"，但 jellynut 的树叫
 -- "jellystem"（"jellynut" 是果子 item，不是树 entity）。这是 Wube 故意的命名区分。
-local function resolve_tree_name(plant)
-    local name
-    if plant == "yumako" then
-        name = "yumako-tree"
-    elseif plant == "jellynut" then
-        name = "jellystem"
-    else
-        return nil
+--
+-- 缓存到 module 上：prototypes 表只在 control 阶段可读，所以 lazy 算一次就够。
+-- 旧版每个 tile 调一次 prototypes.entity[...]，整片 Gleba ~12000 次 hash 查询
+local TREE_NAMES
+local function tree_names()
+    if not TREE_NAMES then
+        TREE_NAMES = {
+            yumako   = prototypes.entity["yumako-tree"] and "yumako-tree" or nil,
+            jellynut = prototypes.entity["jellystem"]   and "jellystem"   or nil,
+        }
     end
-    if prototypes.entity[name] then return name end
-    return nil
+    return TREE_NAMES
 end
 
 -- 把 Gleba 果树拉到成熟阶段（能立刻结果子）。
@@ -42,15 +43,13 @@ end
 -- tree_stage_index 只控制视觉 sprite 阶段，顺手拉到 max 让贴图也是成熟形态。
 local function force_tree_mature(tree)
     if not (tree and tree.valid) then return end
-    pcall(function() tree.tick_grown = game.tick end)
-    pcall(function()
-        local max_stage = tree.tree_stage_index_max
-        if max_stage then tree.tree_stage_index = max_stage end
-    end)
+    tree.tick_grown = game.tick
+    local max_stage = tree.tree_stage_index_max
+    if max_stage then tree.tree_stage_index = max_stage end
 end
 
 local function plant_trees(surface, area, plant)
-    local name = resolve_tree_name(plant)
+    local name = tree_names()[plant]
     if not name then
         log(("[BestLanding] plant_trees: prototype for %s not found, skipping"):format(tostring(plant)))
         return
@@ -60,10 +59,11 @@ local function plant_trees(surface, area, plant)
         for y = area.left_top.y, area.right_bottom.y - 1 do
             if math.random() < C.GLEBA_TREE_DENSITY then
                 local tree = surface.create_entity {
-                    name        = name,
-                    position    = { x + 0.5, y + 0.5 },
-                    force       = "neutral",
-                    raise_built = false,
+                    name                      = name,
+                    position                  = { x + 0.5, y + 0.5 },
+                    force                     = "neutral",
+                    raise_built               = false,
+                    create_build_effect_smoke = false,
                 }
                 force_tree_mature(tree)
             end
@@ -93,19 +93,25 @@ local function place_fluid_band(surface, band, area)
     local cx = math.floor((area.left_top.x + area.right_bottom.x) / 2)
     local cy = math.floor((area.left_top.y + area.right_bottom.y) / 2)
     surface.create_entity {
-        name     = band.name,
-        position = { cx, cy },
-        amount   = C.FLUID_AMOUNT,
+        name                      = band.name,
+        position                  = { cx, cy },
+        amount                    = C.FLUID_AMOUNT,
+        raise_built               = false,
+        create_build_effect_smoke = false,
     }
 end
 
 local function place_ore_band(surface, band, area)
+    -- 矿条 32x64 = 2048 次 create_entity，5 条矿就是 1 万次。
+    -- raise_built / create_build_effect_smoke 关掉省视觉烟雾 + 事件广播
     for x = area.left_top.x, area.right_bottom.x - 1 do
         for y = area.left_top.y, area.right_bottom.y - 1 do
             surface.create_entity {
-                name     = band.name,
-                position = { x, y },
-                amount   = C.ORE_PER_TILE,
+                name                      = band.name,
+                position                  = { x, y },
+                amount                    = C.ORE_PER_TILE,
+                raise_built               = false,
+                create_build_effect_smoke = false,
             }
         end
     end

@@ -94,10 +94,10 @@ end
 local function fill_trunk(spider)
     local inv = spider.get_inventory(defines.inventory.spider_trunk)
     if not inv then return end
+    -- preset 里的 item 都来自 base / space-age / quality（硬依赖），保证存在。
+    -- 不再做 prototypes.item 守卫——typo 应该直接报错而非静默吞掉
     for _, item in pairs(preset_items) do
-        if prototypes.item[item.name] then
-            inv.insert(item)
-        end
+        inv.insert(item)
     end
 end
 

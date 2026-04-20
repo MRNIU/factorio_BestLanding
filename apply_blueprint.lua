@@ -170,8 +170,13 @@ end
 function M.run(surface)
     if not (surface and surface.valid) then return end
 
-    for _, bp in pairs(blueprints) do
-        if bp.name and bp.data and string.lower(bp.name) == string.lower(surface.name) then
+    -- blueprints 是 { lowercase_surface_name = { entry, entry, ... } } 结构，
+    -- 直接 O(1) 取这颗行星对应的 list
+    local entries = blueprints[string.lower(surface.name)]
+    if not entries then return end
+
+    for _, bp in ipairs(entries) do
+        if bp.data then
             apply(surface, bp.data, bp.pos or { x = 0, y = 0 }, bp.direction or 0)
         end
     end

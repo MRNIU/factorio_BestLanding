@@ -6,11 +6,15 @@ local chunks = require("chunks")
 
 local M = {}
 
--- 以 (0,0) 为中心的清理区
+-- 以 (0,0) 为中心的清理区。
+-- 区间惯例：left_top 闭、right_bottom 开（"半开"）—— 和 place_resources 的
+-- band_area 保持一致，避免 off-by-one。所以覆盖 tiles 是 [-CLEAR_RADIUS, CLEAR_RADIUS)
+-- 共 2*CLEAR_RADIUS 个 tile。对 LuaSurface::find_entities / set_tiles 的 area
+-- 参数来说，闭/开差别只在边界一行，无功能影响
 local function center_area()
     return {
-        left_top     = { x = -C.CLEAR_RADIUS,     y = -C.CLEAR_RADIUS     },
-        right_bottom = { x =  C.CLEAR_RADIUS - 1, y =  C.CLEAR_RADIUS - 1 },
+        left_top     = { x = -C.CLEAR_RADIUS, y = -C.CLEAR_RADIUS },
+        right_bottom = { x =  C.CLEAR_RADIUS, y =  C.CLEAR_RADIUS },
     }
 end
 
@@ -58,15 +62,24 @@ local function cleanup_enemies(surface, inner_area, cleanup)
     end
 end
 
--- 把整个清理区刷成默认 tile（保证原生的水 / 岩 / 坑全被覆盖，落地即可建）
+-- 把整个清理区刷成默认 tile（保证原生的水 / 岩 / 坑全被覆盖，落地即可建）。
+-- set_tiles 的位置参数（按顺序）：
+--   tiles, correct_tiles=true, remove_colliding_entities=true,
+--   remove_colliding_decoratives=true, raise_event=false
+--
+-- correct_tiles=false：跳过相邻边缘修正。整片填同一种 tile，内部 tile 之间
+--   不需要任何过渡贴图；只有外边界一圈会和未清理区交界，那一圈不修正最多就是
+--   贴图衔接糙一点，不影响功能。这个 flag 是这里最大的 hot-loop 收益
+-- remove_colliding_entities=false：清理实体已经在 purge_entities 干完了，
+--   set_tiles 再扫一次纯属重复
 local function repaint(surface, area, tile_name)
     local tiles = {}
-    for x = area.left_top.x, area.right_bottom.x do
-        for y = area.left_top.y, area.right_bottom.y do
+    for x = area.left_top.x, area.right_bottom.x - 1 do
+        for y = area.left_top.y, area.right_bottom.y - 1 do
             tiles[#tiles + 1] = { name = tile_name, position = { x, y } }
         end
     end
-    surface.set_tiles(tiles)
+    surface.set_tiles(tiles, false, false, false, false)
 end
 
 --------------------------------------------------------------------------------
