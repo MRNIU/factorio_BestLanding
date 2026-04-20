@@ -1,0 +1,102 @@
+-- Copyright The MRNIU/factorio_BestLanding Contributors
+-- 阶段 1：把降落区 (0,0) 周围 448×448 清空、刷默认地形；按星球配置再清扩围内的敌人。
+
+local C      = require("constants")
+local chunks = require("chunks")
+
+local M = {}
+
+-- 以 (0,0) 为中心的清理区
+local function center_area()
+    return {
+        left_top     = { x = -C.CLEAR_RADIUS,     y = -C.CLEAR_RADIUS     },
+        right_bottom = { x =  C.CLEAR_RADIUS - 1, y =  C.CLEAR_RADIUS - 1 },
+    }
+end
+
+-- 把 area 沿四边扩 n tile
+local function expand_area(area, n)
+    return {
+        left_top     = { x = area.left_top.x     - n, y = area.left_top.y     - n },
+        right_bottom = { x = area.right_bottom.x + n, y = area.right_bottom.y + n },
+    }
+end
+
+-- 把 {left_top, right_bottom} 翻成 LuaSurface::find_entities(_filtered) 期望的嵌套数组格式
+local function to_api_area(area)
+    return {
+        { area.left_top.x,     area.left_top.y     },
+        { area.right_bottom.x, area.right_bottom.y },
+    }
+end
+
+-- 清掉区域内所有非玩家实体。find_entities 已经覆盖 resource / cliff / tree / 敌人，
+-- 不需要再用 filtered 各跑一遍（旧代码那两段 find_entities_filtered 是冗余）。
+local function purge_entities(surface, area)
+    for _, e in pairs(surface.find_entities(to_api_area(area))) do
+        if e.valid and e.type ~= "character" then
+            e.destroy()
+        end
+    end
+end
+
+-- 按 cleanup cfg 扫扩围清敌人 / Demolisher
+local function cleanup_enemies(surface, inner_area, cleanup)
+    if not cleanup or not cleanup.expand or cleanup.expand <= 0 then return end
+
+    local outer = expand_area(inner_area, cleanup.expand)
+    -- inner 已经被 purge_entities 扫过，只需要把外环的 chunk 补上
+    chunks.force_generate_ring(surface, inner_area, outer)
+
+    local api_area = to_api_area(outer)
+    for _, filter in ipairs(cleanup.filters or {}) do
+        local query = { area = api_area }
+        for k, v in pairs(filter) do query[k] = v end
+        for _, e in pairs(surface.find_entities_filtered(query)) do
+            if e.valid then e.destroy() end
+        end
+    end
+end
+
+-- 把整个清理区刷成默认 tile（保证原生的水 / 岩 / 坑全被覆盖，落地即可建）
+local function repaint(surface, area, tile_name)
+    local tiles = {}
+    for x = area.left_top.x, area.right_bottom.x do
+        for y = area.left_top.y, area.right_bottom.y do
+            tiles[#tiles + 1] = { name = tile_name, position = { x, y } }
+        end
+    end
+    surface.set_tiles(tiles)
+end
+
+--------------------------------------------------------------------------------
+-- 阶段入口：供 control.lua 在 pipeline 里调用
+function M.run(surface, cfg)
+    if not (surface and surface.valid) then return end
+
+    local area = center_area()
+    chunks.force_generate(surface, area)
+    purge_entities(surface, area)
+    cleanup_enemies(surface, area, cfg.enemy_cleanup)
+    repaint(surface, area, cfg.default_tile)
+
+    log(("[BestLanding] clean_area: done on %s"):format(surface.name))
+end
+
+-- 供 apply_blueprint 调用：只清树 / 简单实体 / 悬崖，不碰资源、不换 tile
+function M.clean_blueprint_area(surface, area)
+    if not (surface and surface.valid and area) then return end
+
+    local padded = expand_area(area, 5)
+    chunks.force_generate(surface, padded)
+
+    local obstacles = surface.find_entities_filtered {
+        area = to_api_area(padded),
+        type = { "tree", "simple-entity", "cliff" },
+    }
+    for _, e in pairs(obstacles) do
+        if e.valid then e.destroy() end
+    end
+end
+
+return M

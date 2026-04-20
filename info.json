@@ -1,11 +1,11 @@
 {
     "name": "BestLanding",
-    "version": "1.1.5",
+    "version": "1.2.0",
     "title": "BestLanding",
     "author": "zhihong",
     "contact": "zhihong@nzhnb.com",
     "homepage": "https://github.com/MRNIU/factorio_BestLanding",
-    "description": "Clears the landing area and generates resources for a perfect start.",
+    "description": "Clears the landing area on every Space Age planet, seeds planet-appropriate resources, applies a starter blueprint, and spawns a legendary spidertron on arrival.",
     "factorio_version": "2.0",
     "dependencies": [
         "base >= 2.0.76",

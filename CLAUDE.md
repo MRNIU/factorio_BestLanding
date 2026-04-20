@@ -29,38 +29,55 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 ## 架构
 
-纯运行时。四个模块由 `control.lua` 串起来：
+纯运行时，一条 pipeline。`control.lua` 只做事件分发 + 顺序调用四个阶段模块；全部业务知识压在 `planets.lua` 这张配置表里。
 
-- **`control.lua`** — 两个事件处理器。每次着陆都跑同一个四步流水线：
-  1. `area_cleaner.clear_center_area(surface)` — 清空 (0,0) 周边 448×448 的正方形，并铺上该星球对应的默认地表。
-  2. `generate_resources.generate_resource_planet(surface)` — 根据星球铺矿 / 流体源 / 特殊 tile。
-  3. `ApplyBlueprints(surface)` — 在 `blueprint.lua` 里找一个名字（不区分大小写）和当前 surface 匹配的蓝图并应用。
-  4. `legendary_spider.spawn_legendary_spider(surface, {x=0, y=0})` — 生成一辆预配好装备和补给的传奇蜘蛛机甲。
+### 文件职责
 
-  两个事件钩子：`script.on_init(OnInit)`（新游戏时 Nauvis 触发一次）和 `script.on_event(on_surface_created, OnSurfaceCreated)`（每当新行星 surface 生成时触发，用 `surface.planet ~= nil` 排除轨道平台）。
+- **`control.lua`** — 事件注册 + `run_pipeline(surface)`。
+  - `script.on_init(...)` 对 Nauvis 跑一次（`on_surface_created` 对新存档时已存在的 Nauvis 不触发）。
+  - `script.on_event(on_surface_created, ...)` 对其他行星触发，用 `surface.planet ~= nil` 排除太空平台。
+  - pipeline 顺序：`clean_area.run` → `place_resources.run` → `apply_blueprint.run` → `spawn_spider.run`。
 
-- **`area_cleaner.lua`** — `clear_center_area` / `clean_blueprint_area`。内部先走 `force_generate_chunks`（把区域向下取整到 32 tile 的 chunk 边界 → `request_to_generate_chunks` → `force_generate_chunk_requests`），否则 `find_entities_filtered` 在未生成的地形上会静默返回空。Vulcanus 多一趟：在扩大 300 tile 的外围里猎杀 `segmented-unit`（Demolisher），因为它们的领地能越过清理区的边界。
+- **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`BAND_WIDTH=32`、`BAND_HEIGHT=64`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`、`SPIDER_SEARCH_RADII`、`GLEBA_TREE_DENSITY`。
 
-- **`generate_resources.lua`** — 把资源按放置方式分三类：
-  - **Tile 资源**（`water`、`lava`、`oil-ocean-shallow`、`gleba-deep-lake`、`ammoniacal-ocean`、过增殖土）→ `surface.set_tiles`。
-  - **流体资源**（`crude-oil`、`sulfuric-acid-geyser`、`lithium-brine`、`fluorine-vent`）→ 在区域中心单次 `create_entity`，`amount = amount`（传参前 `amount` 已经被乘过 `1024*512`——见 `generate_resource_nauvis`/`vulcanus`/`aquilo`）。
-  - **矿石资源** → 区域内每个 tile 都 `create_entity` 一次。
+- **`planets.lua`** — 五颗行星的 single source of truth。每颗一个 `{ default_tile, enemy_cleanup, origin, bands }`。`bands` 是有序数组，每条 `{ kind = "ore"|"tile"|"fluid", name, plant? }`。`origin` + band 顺序和 `blueprints.lua` 严格绑定，**动这里之前确认蓝图对得上**。
 
-  每颗行星的起点都是手选的（Nauvis 在 `{-112, -224}`，其余的 Vulcanus/Fulgora/Gleba/Aquilo 都是 `{-80, -224}`）。资源条宽 32、高 64、零间距。
+- **`chunks.lua`** — `force_generate` / `force_generate_ring`。批量 `request_to_generate_chunks` + 单次 `force_generate_chunk_requests` 是官方推荐姿势。ring 变体用于 Vulcanus Demolisher 扫描扩围：清理区已经由 `force_generate` 生成过，只补外环 chunk 就够了。
 
-- **`blueprint.lua`** — 五颗行星各一个蓝图字符串 + 一个 `{ name, data, pos, direction }` 列表。`control.lua` 里的匹配是 `string.lower(bp.name) == string.lower(surface.name)`，所以表里大小写怎么写都行。
+- **`clean_area.lua`** — `run(surface, cfg)` + `clean_blueprint_area(surface, area)`。
+  - `run` 流程：`force_generate` 清理区 → `find_entities` 一次扫光非玩家实体（不再第二次 filter 资源 / 悬崖，`find_entities` 已经包含）→ `cleanup_enemies` 按 `cfg.enemy_cleanup.filters` 清扩围 → `set_tiles` 全刷 `cfg.default_tile`。
+  - `clean_blueprint_area` 给 `apply_blueprint` 用，只清树 / 简单实体 / 悬崖，不动矿。
 
-- **`legendary_spider.lua`** — `spawn_legendary_spider(surface, position, force)` 先调 `find_non_colliding_position("spidertron", position, 128, 1)` 避开蓝图实体，再 `create_entity{ name = "spidertron", quality = "legendary" }`。蜘蛛自带 `.grid`（不像装甲那样要先拿 item stack），`init_legendary_spider_armor` 按手摆坐标填满一个 15×11 的装备网格。货仓用 `defines.inventory.spider_trunk`、弹药用 `defines.inventory.spider_ammo`。
+- **`place_resources.lua`** — `run(surface, cfg)`。遍历 `cfg.bands`，按 kind 走三个分支。流体条在中心单次 `create_entity` amount=`FLUID_AMOUNT`。Gleba 的 `tile` 条如果带 `plant = "yumako"|"jellynut"`，`set_tiles` 完后按 `GLEBA_TREE_DENSITY` 概率 `create_entity` 果树。**果树名字注意**：yumako 树是 `"yumako-tree"`，但 jellynut 树叫 `"jellystem"`（"jellynut" 是果子 item 的名字，不是树 entity）。**成熟**靠设 `tree.tick_grown = game.tick`——Gleba 果树是 `PlantPrototype`，成熟判定看 `tick_grown` 这个 MapTick，不是 `tree_stage_index`（后者只影响贴图阶段）。
 
-### 蓝图应用流水线（`ApplyBlueprint`）
+- **`apply_blueprint.lua`** — `run(surface)`。遍历 `blueprints` 表匹配 `surface.name`（小写比较）。单个蓝图流程：
+  1. 临时 `game.create_inventory(1)` + `stack.import_stack(...)` + 校验 `valid_for_read and is_blueprint`。
+  2. `compute_aabb` — **把蓝图本地坐标按 anchor + direction 变换到 surface 坐标**再算 AABB。这是修过的 bug：旧代码直接拿 blueprint-relative 坐标当 surface 坐标用，只因所有蓝图 `pos={0,0} direction=0` 巧合工作。
+  3. `clean.clean_blueprint_area(surface, aabb)` 清树 / 简单实体 / 悬崖。
+  4. `stack.build_blueprint{ build_mode = defines.build_mode.forced }`。forced 模式下 tile 直接落地，**不再手动 `set_tiles`**（旧代码那段是冗余且坐标没变换）。
+  5. 对每个 ghost 调 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`。
+  - `fulfill_item_requests` — **用 `proxy.insert_plan`，不是 `proxy.item_requests`**。LuaEntity 上这两个字段格式完全不同：
+    - `LuaEntity::item_requests :: ItemWithQualityCounts`（只读）—— 扁平 `[{name, quality, count}, ...]`，没有 slot 信息
+    - `LuaEntity::insert_plan :: array[BlueprintInsertPlan]`（读写）—— per-slot `[{id={name, quality}, items={in_inventory=[{inventory, stack, count}, ...], grid_count?}}, ...]`
 
-和 `LegendaryShipStart` 的那套形状一样，但目标是行星 surface 而不是太空平台：
+    模块 / 过滤器 / 弹药要进对的 inventory，必须走 `insert_plan` 拿 `slot.inventory`（`defines.inventory.*` 编号）再 `entity.get_inventory(slot.inventory):insert{...}`。对回收机尤其关键：模块的 `slot.inventory` 是 `assembling_machine_modules`，按这个走进模块槽、**不会被当作回收原料**。
+    
+    注意 `slot.count` 可选，省略时默认 1——传 `nil` 给 `LuaInventory::insert` 会静默插 0 件。必须 `slot.count or 1`。
+    
+    参考实现：<https://github.com/refulgence/quantum-fabrication/blob/main/scripts/builder.lua>
+  - 整段用 `pcall` 包起来，即便中途抛错也保证 `inventory.destroy()` 跑到。
 
-1. `game.create_inventory(1)` → `stack.import_stack(blueprint_string)` → 用 `stack.valid_for_read and stack.is_blueprint` 校验。
-2. 遍历 `get_blueprint_entities()` / `get_blueprint_tiles()` 算 AABB，然后 `area_cleaner.clean_blueprint_area`（只清树 / 岩石 / 悬崖，**不动矿**）。
-3. `surface.set_tiles(...)` 铺蓝图 tile。
-4. `stack.build_blueprint{ build_mode = defines.build_mode.forced, skip_fog_of_war = false }` → 对每个返回的 ghost 调 `revive({ raise_revive = true })`；如果顺带返回 `item_request_proxy` 就把 `item_requests` 灌进实体，这样蓝图里序列化的模块 / 过滤器 / 弹药才会真正进入实体。
-5. 销毁临时库存。
+- **`spawn_spider.lua`** — `run(surface)`。`find_non_colliding_position("spidertron", (0,0), r, 1)` 按 `SPIDER_SEARCH_RADII = {128, 256, 512}` 逐级放宽；三档全失败才退回 `(0,0)`。然后 `create_entity{ name = "spidertron", quality = "legendary" }`，按 `equipment_layout` 填 15×11 网格，货仓 `defines.inventory.spider_trunk`、弹药 `defines.inventory.spider_ammo`。
+
+- **`blueprints.lua`** — 五颗行星各一个蓝图字符串 + 一个 `{ name, data, pos, direction }` 列表。`apply_blueprint` 的匹配是 `string.lower(bp.name) == string.lower(surface.name)`，所以表里大小写怎么写都行。
+
+### 星球配置 → 资源条 → 蓝图 的契约
+
+`planets.lua` 里每颗星球的 `origin + bands` 决定了矿 / tile / 流体在 surface 上的落点，蓝图字符串是按照这个落点手搓的。所以：
+
+- 改 `origin` / `bands` 顺序 / band 宽高 = 蓝图对不齐。
+- 改 band 的 `name`（资源类型） = 蓝图可能落空（比如蓝图里的 pumpjack 对着的位置不再是 crude-oil 了）。
+- 改 `ORE_PER_TILE` / `FLUID_AMOUNT` = 安全（只是数值，蓝图不依赖）。
 
 ### 状态模型（Factorio 2.0）
 
@@ -68,14 +85,18 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 ## 常见坑
 
-- **`find_entities_*` / `set_tiles` 之前 chunk 必须先生成完。** `area_cleaner.lua` 里所有函数都先走 `force_generate_chunks` 就是这个原因。
-- **Demolisher 的领地会越过本体位置。** `clear_area_to_land` 里 300 tile 的扩围不是随便设的，缩了会让领地重新覆盖着陆区。
-- **`find_non_colliding_position` 可能返回 nil。** `spawn_legendary_spider` 拿不到安全位置时会退回原位置，后续 `create_entity` 就可能失败。如果以后调小搜索半径要注意。
-- **蓝图条目虽然带 `pos` 和 `direction`**，但五个都是 `{x=0, y=0}` 和 `0`。以后如果蓝图要偏移原点，记得确认 `ApplyBlueprint` 里的 chunk 生成仍然覆盖了新的 AABB（它是按 entities/tiles 算的，理论上会自动跟上——但还是验一下）。
+- **`find_entities_*` / `set_tiles` 之前 chunk 必须先生成完**：未生成的 chunk 上前者返回空、后者无效果。`clean_area.lua` 和 `apply_blueprint` 的 `clean_blueprint_area` 都先走 `chunks.force_generate`。
+- **Demolisher 的领地会越过本体位置**：`ENEMY_EXPAND.vulcanus = 300` 不是拍脑袋，缩了会让领地重新覆盖着陆区。
+- **`find_non_colliding_position` 可能返回 nil**：`spawn_spider` 用三档半径兜底；再失败才退回 `(0,0)` 原位。
+- **资源条 amount 是 uint32**：`FLUID_AMOUNT` 必须 ≤ `0xFFFFFFFF`。旧代码 `8192*1024*512 = 2^32` 溢出。
+- **`item_requests` 和 `insert_plan` 是两个不同字段**（Factorio 2.0 里最容易踩的陷阱）：`item_requests` 是扁平 `{name, quality, count}` 的 ReadOnly 聚合视图；`insert_plan` 才是带 `{id, items.in_inventory[]}` 结构的 per-slot 列表。要把模块 / 弹药按蓝图指定的槽位插进实体，**必须**走 `insert_plan`。旧代码读 `item_requests` 按 `BlueprintInsertPlan` 解析会静默失败（每个元素的 `.id` 都是 nil）。
+- **`ghost.revive{}` 要显式传 `return_item_request_proxy = true`**：这个参数在 API 页上没文档，但 2.0 时代的实测 Mod（quantum-fabrication 等）都这么传。不传可能拿不到 proxy。
+- **Gleba 果树命名坑**：yumako 的树是 `"yumako-tree"`，jellynut 的树叫 `"jellystem"`——"jellynut" 只是果子 item 的名字。猜错名字会导致半个星球的 soil 上没树。
+- **Gleba 果树成熟靠 `tick_grown`，不是 `tree_stage_index`**：`PlantPrototype` 的成熟判定看 `LuaEntity::tick_grown` 这个 MapTick，`tree_stage_index` 只影响贴图阶段。要让树一落地就能采，设 `tree.tick_grown = game.tick`。
 
 ## 本地化
 
-`locale/zh-CN/zh-CN.cfg` 里 `[mod-name]` / `[mod-description]` 用的 key 是 `factorio_BestLanding`，但 `info.json` 的 `name` 是 `BestLanding`。两边必须一致 Factorio 才会匹配——已知不一致，动本地化时顺手改掉。
+`locale/zh-CN/zh-CN.cfg` 的 `[mod-name]` / `[mod-description]` key 必须等于 `info.json` 的 `name = "BestLanding"`。曾经有过 `factorio_BestLanding` 的错位，1.2.0 已修。
 
 ## 语言约定
 
@@ -97,7 +118,9 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 - `LuaSurface::find_entities`、`find_entities_filtered`、`create_entity`、`set_tiles`、`request_to_generate_chunks`、`force_generate_chunk_requests`、`find_non_colliding_position`
 - `LuaSurface::planet`（太空平台上为 nil，可以用来过滤）
 - `LuaItemStack::import_stack`、`get_blueprint_entities`、`get_blueprint_tiles`、`build_blueprint`
-- `LuaEntity::revive{ raise_revive = true }` 以及 `item_request_proxy.item_requests`
+- `LuaEntity::revive{ raise_revive, return_item_request_proxy }`
+- `LuaEntity::insert_plan`（array[BlueprintInsertPlan]，per-slot 蓝图插入计划）vs `LuaEntity::item_requests`（扁平 ItemWithQualityCounts，只读聚合）
+- `LuaEntity::tick_grown`、`tree_stage_index`、`tree_stage_index_max`（Gleba PlantPrototype 成熟判定）
 - `defines.inventory.spider_trunk`、`defines.inventory.spider_ammo`
 - `defines.build_mode.forced`
 - `defines.events.on_init`、`on_surface_created`

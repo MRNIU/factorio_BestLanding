@@ -1,4 +1,22 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.2.0
+Date: 2026-04-20
+  Changes:
+    - Restructured codebase into a stage pipeline (clean_area -> place_resources -> apply_blueprint -> spawn_spider) driven by a single planets.lua config table.
+    - Renamed area_cleaner.lua / generate_resources.lua / legendary_spider.lua / blueprint.lua to clean_area.lua / place_resources.lua / spawn_spider.lua / blueprints.lua.
+    - Added Nauvis and Gleba enemy cleanup (256-tile expand ring) to sweep spawners, worms, and pentapod nests beyond the landing zone.
+    - Plant mature, fruit-bearing yumako trees and jellystem trees on Gleba overgrowth soil bands (50% density). Trees are marked mature via LuaEntity::tick_grown so they can be harvested immediately.
+    - Fixed fluid source amount overflowing uint32 (8192*1024*512 = 2^32 > uint32 max). Now clamped to 0xFFFFFFFF so crude oil, sulfuric acid geysers, lithium brine, and fluorine vents seed at max capacity.
+    - Fixed blueprint module / filter / ammo requests not being delivered to revived entities on Factorio 2.0. apply_blueprint now reads LuaEntity::insert_plan (per-slot BlueprintInsertPlan) instead of the flat LuaEntity::item_requests view, and calls revive with return_item_request_proxy = true. Productivity modules inside recycler blueprints now land in the module slot, not the recycling input queue.
+    - Fixed AABB in apply_blueprint to transform blueprint-local coordinates to surface coordinates via anchor + direction before use; previously worked only by accident when every blueprint anchored at (0,0) with direction 0.
+    - Removed redundant manual set_tiles in apply_blueprint; forced build_blueprint already places tiles directly.
+    - Removed redundant resource/cliff second-pass cleanup in the landing-area cleaner; find_entities already covers them.
+    - Switched Vulcanus Demolisher scan to ring chunk generation, cutting one-time chunk-generation cost by ~70%.
+    - Spider spawn now retries find_non_colliding_position at radii 128, 256, 512 before falling back to origin.
+    - Replaced in-chat game.print diagnostics with log(); warnings still go to factorio-current.log.
+    - Fixed locale key mismatch between info.json name and locale/zh-CN/zh-CN.cfg.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.1.5
 Date: 2026-04-19
   Changes:

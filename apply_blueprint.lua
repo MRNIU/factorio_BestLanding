@@ -1,0 +1,180 @@
+-- Copyright The MRNIU/factorio_BestLanding Contributors
+-- 阶段 3：把 blueprints.lua 里匹配当前 surface 的蓝图应用到降落区。
+
+local clean      = require("clean_area")
+local blueprints = require("blueprints")
+
+local M = {}
+
+--------------------------------------------------------------------------------
+-- 蓝图本地坐标 → surface 坐标：先按 MapDirection 旋转，再平移 anchor
+
+local function transform_pos(pos, anchor, direction)
+    local x, y = pos.x, pos.y
+    -- MapDirection：0=N, 2=E, 4=S, 6=W（每 2 单位 = 90°）
+    if direction == 2 then
+        x, y = -y, x
+    elseif direction == 4 then
+        x, y = -x, -y
+    elseif direction == 6 then
+        x, y = y, -x
+    end
+    return { x = x + anchor.x, y = y + anchor.y }
+end
+
+-- 从蓝图 entities + tiles 的本地坐标，换算出 surface 上的 AABB
+local function compute_aabb(entities, tiles, anchor, direction)
+    local min_x, min_y =  math.huge,  math.huge
+    local max_x, max_y = -math.huge, -math.huge
+
+    local function extend(pos)
+        local p = transform_pos(pos, anchor, direction)
+        if p.x < min_x then min_x = p.x end
+        if p.x > max_x then max_x = p.x end
+        if p.y < min_y then min_y = p.y end
+        if p.y > max_y then max_y = p.y end
+    end
+
+    if entities then for _, e in pairs(entities) do extend(e.position) end end
+    if tiles    then for _, t in pairs(tiles)    do extend(t.position) end end
+
+    if min_x == math.huge then return nil end
+    return {
+        left_top     = { x = min_x, y = min_y },
+        right_bottom = { x = max_x, y = max_y },
+    }
+end
+
+--------------------------------------------------------------------------------
+-- item_request_proxy 兑现：把模块 / 弹药 / 过滤器等插回复活实体
+
+-- LuaEntity 上和蓝图物品请求相关的有两个**格式不同**的字段（Factorio 2.0）：
+--
+--   item_requests :: Read  ItemWithQualityCounts = array[ItemWithQualityCount]
+--                    扁平格式 { name, quality, count }，没有 slot 信息
+--   insert_plan   :: R/W   array[BlueprintInsertPlan]
+--                    per-slot 格式 { id = {name, quality},
+--                                     items = { in_inventory :: array[InventoryPosition],
+--                                               grid_count   :: uint? } }
+--                    其中 InventoryPosition = { inventory :: defines.inventory.*,
+--                                                stack :: ItemStackIndex (0-based),
+--                                                count :: uint? }  -- 省略默认 1
+--
+-- 我们要的是 insert_plan：它精确指定每件物品要进哪个 inventory 的哪个 slot。
+-- 对回收机这种多 inventory 的实体，BlueprintInsertPlan 会把模块的 inventory 标成
+-- assembling_machine_modules（模块槽）而不是 input 队列——所以模块进模块槽、不会
+-- 被当作回收原料。
+--
+-- 旧代码读 `proxy.item_requests` 并当成 `BlueprintInsertPlan[]` 解析，`plan.id` 是
+-- nil，守卫直接跳过——这就是"所有插件都没插进去"的原因。
+local function fulfill_item_requests(entity, proxy)
+    if not (proxy and proxy.valid) then return end
+
+    for _, plan in pairs(proxy.insert_plan) do
+        local name    = plan.id and plan.id.name
+        local quality = (plan.id and plan.id.quality) or "normal"
+
+        if name and plan.items and plan.items.in_inventory then
+            for _, slot in pairs(plan.items.in_inventory) do
+                local inv = entity.get_inventory(slot.inventory)
+                if inv then
+                    local want = slot.count or 1
+                    local inserted = inv.insert { name = name, count = want, quality = quality }
+                    if inserted < want then
+                        log(("[BestLanding] fulfill_item_requests: inserted %d/%d of %s (q=%s) into %s inv=%s")
+                            :format(inserted, want, name, quality, entity.name, tostring(slot.inventory)))
+                    end
+                end
+            end
+        end
+        -- plan.items.grid_count（装甲网格里的装备请求）暂不处理：
+        -- 本 Mod 的 5 个蓝图里没有带装备网格的实体（蜘蛛走 spawn_spider，不走蓝图）
+    end
+
+    proxy.destroy()
+end
+
+--------------------------------------------------------------------------------
+-- 应用单个蓝图
+
+local function apply(surface, blueprint_string, anchor, direction)
+    if not blueprint_string or blueprint_string == "" then
+        return false, "empty blueprint"
+    end
+
+    -- 临时库存承载 BlueprintItem；pcall 保证即便中途抛错也 destroy，不泄漏
+    local inventory = game.create_inventory(1)
+    local ok, err = pcall(function()
+        local stack = inventory[1]
+
+        local import_result = stack.import_stack(blueprint_string)
+        if import_result ~= 0 then
+            log(("[BestLanding] apply_blueprint: import_stack returned %d on %s")
+                :format(import_result, surface.name))
+        end
+        if not (stack.valid_for_read and stack.is_blueprint) then
+            error("stack is not a valid blueprint after import")
+        end
+
+        -- 先算蓝图在 surface 上的 AABB，清掉范围内的树 / 简单实体 / 悬崖
+        local aabb = compute_aabb(
+            stack.get_blueprint_entities(),
+            stack.get_blueprint_tiles(),
+            anchor, direction
+        )
+        if aabb then
+            clean.clean_blueprint_area(surface, aabb)
+        end
+
+        -- 直接 build_blueprint：forced 模式下 tile 直接铺（不走 tile ghost），
+        -- 实体生成为 ghost 等我们手动 revive。不再手动 set_tiles——旧代码那段
+        -- 既冗余又带着一个 blueprint-relative 坐标没变换的 bug。
+        local ghosts = stack.build_blueprint {
+            surface         = surface,
+            force           = game.forces.player,
+            position        = { anchor.x, anchor.y },
+            direction       = direction,
+            build_mode      = defines.build_mode.forced,
+            skip_fog_of_war = false,
+        } or {}
+
+        -- revive 参数：
+        --   raise_revive = false              省掉 script_raised_revive 事件广播
+        --   return_item_request_proxy = true  确保第三个返回值给到 item_request_proxy
+        --                                     （quantum-fabrication 等 2.0 working Mod 都这么传）
+        for _, ghost in pairs(ghosts) do
+            if ghost.valid then
+                local _, revived_entity, proxy = ghost.revive {
+                    raise_revive              = false,
+                    return_item_request_proxy = true,
+                }
+                if revived_entity then
+                    fulfill_item_requests(revived_entity, proxy)
+                end
+            end
+        end
+    end)
+
+    inventory.destroy()
+
+    if not ok then
+        log(("[BestLanding] apply_blueprint: error on %s: %s"):format(surface.name, tostring(err)))
+        return false, err
+    end
+    return true
+end
+
+--------------------------------------------------------------------------------
+-- 阶段入口
+
+function M.run(surface)
+    if not (surface and surface.valid) then return end
+
+    for _, bp in pairs(blueprints) do
+        if bp.name and bp.data and string.lower(bp.name) == string.lower(surface.name) then
+            apply(surface, bp.data, bp.pos or { x = 0, y = 0 }, bp.direction or 0)
+        end
+    end
+end
+
+return M

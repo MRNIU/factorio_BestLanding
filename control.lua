@@ -1,146 +1,39 @@
 -- Copyright The MRNIU/factorio_BestLanding Contributors
+-- 事件入口 + 降落流水线编排。所有业务逻辑拆到各阶段模块，这里只做事件分发。
 
--- 引入区域清理器模块
-local area_cleaner = require("area_cleaner")
-local generate_resources = require("generate_resources")
-local blueprints = require("blueprint")
-local legendary_spider = require("legendary_spider")
+local planets         = require("planets")
+local clean_area      = require("clean_area")
+local place_resources = require("place_resources")
+local apply_blueprint = require("apply_blueprint")
+local spawn_spider    = require("spawn_spider")
 
---------------------------------------------------------------------------------------
--- Apply blueprint to the given surface
-local function ApplyBlueprint(surface, blueprint_string, blueprint_pos, blueprint_direction)
-    -- 仅在有玩家的势力执行，通常是 "player"
-    local force = game.forces["player"]
+-- 流水线顺序：清理 → 铺资源 → 铺蓝图 → 生成蜘蛛。
+-- 注意：蜘蛛在蓝图之后生成，用 find_non_colliding_position + 多半径 fallback
+-- 绕开蓝图实体。如果蓝图把中心整块占满就只能退到 (0,0)，容 log 显示。
+local function run_pipeline(surface)
+    if not (surface and surface.valid) then return end
+    local cfg = planets[surface.name]
+    if not cfg then return end
 
-    -- 如果提供了蓝图字符串，则应用蓝图
-    if blueprint_string and blueprint_string ~= "" then
-        -- 创建一个临时库存来处理蓝图
-        local inventory = game.create_inventory(1)
-        local stack = inventory[1]
-
-        -- 导入蓝图字符串
-        -- import_stack 返回 0 表示成功 (在某些版本中)，或者我们需要检查 stack 是否有效
-        local import_result = stack.import_stack(blueprint_string)
-
-        if stack.valid_for_read and stack.is_blueprint then
-            -- 0. 预先生成区块，防止蓝图过大超出范围
-            local blueprint_entities = stack.get_blueprint_entities()
-            local blueprint_tiles = stack.get_blueprint_tiles()
-
-            local min_x, min_y, max_x, max_y = 0, 0, 0, 0
-            local initialized = false
-
-            local function update_bounds(pos)
-                if not initialized then
-                    min_x, min_y = pos.x, pos.y
-                    max_x, max_y = pos.x, pos.y
-                    initialized = true
-                else
-                    if pos.x < min_x then min_x = pos.x end
-                    if pos.x > max_x then max_x = pos.x end
-                    if pos.y < min_y then min_y = pos.y end
-                    if pos.y > max_y then max_y = pos.y end
-                end
-            end
-
-            if blueprint_entities then
-                for _, entity in pairs(blueprint_entities) do
-                    update_bounds(entity.position)
-                end
-            end
-
-            if blueprint_tiles then
-                for _, tile in pairs(blueprint_tiles) do
-                    update_bounds(tile.position)
-                end
-            end
-
-            if initialized then
-                area_cleaner.clean_blueprint_area(surface, { { min_x, min_y }, { max_x, max_y } })
-            end
-
-            -- 1. 强制铺设地板
-            if blueprint_tiles then
-                local tiles_to_set = {}
-                for _, t in pairs(blueprint_tiles) do
-                    table.insert(tiles_to_set, { name = t.name, position = t.position })
-                end
-                surface.set_tiles(tiles_to_set)
-            end
-
-            -- 2. 在指定位置放置蓝图 (主要是实体)
-            local ghosts = stack.build_blueprint {
-                surface = surface,
-                force = force,
-                position = { blueprint_pos.x, blueprint_pos.y },
-                direction = blueprint_direction,
-                build_mode = defines.build_mode.forced,
-                skip_fog_of_war = false
-            }
-
-            -- 3. 立即复活所有虚影为实体
-            if ghosts then
-                for _, ghost in pairs(ghosts) do
-                    local revived, revived_entity, item_request_proxy = ghost.revive({ raise_revive = true })
-                    if revived and revived_entity and item_request_proxy and item_request_proxy.valid then
-                        -- 如果有物品请求代理（通常是插件），则插入物品并销毁代理
-                        for _, item_req in pairs(item_request_proxy.item_requests) do
-                            revived_entity.insert(item_req)
-                        end
-                        item_request_proxy.destroy()
-                    end
-                end
-            end
-
-            game.print("BestLanding: Blueprint applied!")
-        else
-            game.print("BestLanding: Invalid blueprint string or import failed. Result: " ..
-                tostring(import_result))
-        end
-
-        inventory.destroy()
-    else
-        game.print("BestLanding: No blueprint provided.")
-    end
+    clean_area.run(surface, cfg)
+    place_resources.run(surface, cfg)
+    apply_blueprint.run(surface)
+    spawn_spider.run(surface)
 end
 
-local function ApplyBlueprints(surface)
-    if not blueprints then return end
-
-    for _, bp in pairs(blueprints) do
-        if bp.name and surface.name and string.lower(bp.name) == string.lower(surface.name) then
-            if bp.data then
-                ApplyBlueprint(surface, bp.data, bp.pos, bp.direction)
-            end
-        end
-    end
-end
-
---------------------------------------------------------------------------------------
--- 在游戏初始化时清空中心区域
-local function OnInit()
-    area_cleaner.clear_center_area(game.surfaces.nauvis)
-    generate_resources.generate_resource_planet(game.surfaces.nauvis)
-    ApplyBlueprints(game.surfaces.nauvis)
-    legendary_spider.spawn_legendary_spider(game.surfaces.nauvis, { x = 0, y = 0 })
-end
-
---------------------------------------------------------------------------------------
--- 在新星球创建时清空中心区域
-local function OnSurfaceCreated(event)
-    local surface = game.surfaces[event.surface_index]
-
-    if not surface.planet then
-        return
-    end
-
-    area_cleaner.clear_center_area(surface)
-    generate_resources.generate_resource_planet(surface)
-    ApplyBlueprints(surface)
-    legendary_spider.spawn_legendary_spider(surface, { x = 0, y = 0 })
-end
-
---------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 -- 事件注册
-script.on_init(OnInit)
-script.on_event(defines.events.on_surface_created, OnSurfaceCreated)
+
+-- on_surface_created 对新存档时已经存在的 Nauvis 不会触发，必须在 on_init 单独跑一次
+script.on_init(function()
+    run_pipeline(game.surfaces.nauvis)
+end)
+
+-- 其它行星在玩家第一次落地时由 on_surface_created 触发。
+-- surface.planet 为 nil 的是太空平台 / 手动 create_surface 的表面，跳过。
+script.on_event(defines.events.on_surface_created, function(event)
+    local surface = game.surfaces[event.surface_index]
+    if surface and surface.planet then
+        run_pipeline(surface)
+    end
+end)
