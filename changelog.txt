@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.3.0
+Date: 2026-04-25
+  Changes:
+    - Added runtime-global setting "Apply starter blueprints" (default: on) so players can skip the per-planet blueprint pass while keeping landing-area cleanup, resource seeding, and the legendary spidertron. Setting only affects planets created after the change; already-landed planets are not reprocessed.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.2.1
 Date: 2026-04-20
   Changes:

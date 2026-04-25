@@ -20,6 +20,13 @@ local function run_stage(name, fn, ...)
     end
 end
 
+-- runtime-global setting，缺失时（理论不会，settings.lua 已声明）兜底视为 true。
+-- settings.global[name] 在 setting 未注册时返回 nil；用 .value 之前必须判空。
+local function apply_blueprints_enabled()
+    local s = settings.global["BestLanding-apply-blueprints"]
+    return s == nil or s.value
+end
+
 local function run_pipeline(surface)
     if not (surface and surface.valid) then return end
     local cfg = planets[surface.name]
@@ -27,7 +34,11 @@ local function run_pipeline(surface)
 
     run_stage("clean_area",      clean_area.run,      surface, cfg)
     run_stage("place_resources", place_resources.run, surface, cfg)
-    run_stage("apply_blueprint", apply_blueprint.run, surface)
+    if apply_blueprints_enabled() then
+        run_stage("apply_blueprint", apply_blueprint.run, surface)
+    else
+        log(("[BestLanding] apply_blueprint skipped on %s (setting disabled)"):format(surface.name))
+    end
     run_stage("spawn_spider",    spawn_spider.run,    surface)
 end
 
