@@ -52,7 +52,7 @@ Date: 2026-04-19
     - Cleaned up dead .x-or-[1] fallback code paths in area_cleaner.
     - Replaced dead modulo in generate_resources_pattern with plain ipairs.
     - Rewrote README in English only.
-    - Added CLAUDE.md with architecture notes, gotchas, and Factorio API references.
+    - Added AGENTS.md with architecture notes, gotchas, and Factorio API references.
 
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.2
