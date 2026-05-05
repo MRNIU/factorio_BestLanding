@@ -14,7 +14,7 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 - [`LegendaryMechStart`](https://github.com/MRNIU/factorio_LegendaryMechStart) — 传奇机甲 + 装备网格 + 初始物品
 - [`LegendaryShipStart`](https://github.com/MRNIU/factorio_LegendaryShipStart) — 预置传奇太空飞船
-- **`BestLanding`（本仓库）** — 着陆区清理 + 行星资源 + 传奇蜘蛛
+- **`BestLanding`（本仓库）** — 着陆区清理 + 行星资源 + 起始蓝图
 - [`nzh_factorio_mod`](https://github.com/MRNIU/nzh_factorio_mod) — 整合包，一键启用上面三个
 
 **如果发现本 Mod 要做的事和兄弟 Mod 重叠了**（比如"玩家背包发放物品" vs `LegendaryMechStart`、"太空平台蓝图" vs `LegendaryShipStart`），先停下问用户，不要在本仓库重复实现。`LegendaryShipStart` 有几乎同样的蓝图应用流水线，涉及蓝图处理时可以参考它——但别跨仓库 require。
@@ -36,9 +36,9 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 - **`control.lua`** — 事件注册 + `run_pipeline(surface)`。
   - `script.on_init(...)` 对 Nauvis 跑一次（`on_surface_created` 对新存档时已存在的 Nauvis 不触发）。
   - `script.on_event(on_surface_created, ...)` 对其他行星触发，用 `surface.planet ~= nil` 排除太空平台。
-  - pipeline 顺序：`clean_area.run` → `place_resources.run` → `apply_blueprint.run` → `spawn_spider.run`。
+  - pipeline 顺序：`clean_area.run` → `place_resources.run` → `apply_blueprint.run`。
 
-- **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`BAND_WIDTH=32`、`BAND_HEIGHT=64`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`、`SPIDER_SEARCH_RADII`、`GLEBA_TREE_DENSITY`。
+- **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`BAND_WIDTH=32`、`BAND_HEIGHT=64`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`、`GLEBA_TREE_DENSITY`。
 
 - **`planets.lua`** — 五颗行星的 single source of truth。每颗一个 `{ default_tile, enemy_cleanup, origin, bands }`。`bands` 是有序数组，每条 `{ kind = "ore"|"tile"|"fluid", name, plant? }`。`origin` + band 顺序和 `blueprints.lua` 严格绑定，**动这里之前确认蓝图对得上**。
 
@@ -67,8 +67,6 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
     参考实现：<https://github.com/refulgence/quantum-fabrication/blob/main/scripts/builder.lua>
   - 整段用 `pcall` 包起来，即便中途抛错也保证 `inventory.destroy()` 跑到。
 
-- **`spawn_spider.lua`** — `run(surface)`。`find_non_colliding_position("spidertron", (0,0), r, 1)` 按 `SPIDER_SEARCH_RADII = {128, 256, 512}` 逐级放宽；三档全失败才退回 `(0,0)`。然后 `create_entity{ name = "spidertron", quality = "legendary" }`，按 `equipment_layout` 填 15×11 网格，货仓 `defines.inventory.spider_trunk`、弹药 `defines.inventory.spider_ammo`。
-
 - **`blueprints.lua`** — 五颗行星各一个蓝图字符串 + 一个 `{ name, data, pos, direction }` 列表。`apply_blueprint` 的匹配是 `string.lower(bp.name) == string.lower(surface.name)`，所以表里大小写怎么写都行。
 
 ### 星球配置 → 资源条 → 蓝图 的契约
@@ -87,7 +85,6 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 - **`find_entities_*` / `set_tiles` 之前 chunk 必须先生成完**：未生成的 chunk 上前者返回空、后者无效果。`clean_area.lua` 和 `apply_blueprint` 的 `clean_blueprint_area` 都先走 `chunks.force_generate`。
 - **Demolisher 的领地会越过本体位置**：`ENEMY_EXPAND.vulcanus = 300` 不是拍脑袋，缩了会让领地重新覆盖着陆区。
-- **`find_non_colliding_position` 可能返回 nil**：`spawn_spider` 用三档半径兜底；再失败才退回 `(0,0)` 原位。
 - **资源条 amount 是 uint32**：`FLUID_AMOUNT` 必须 ≤ `0xFFFFFFFF`。旧代码 `8192*1024*512 = 2^32` 溢出。
 - **`item_requests` 和 `insert_plan` 是两个不同字段**（Factorio 2.0 里最容易踩的陷阱）：`item_requests` 是扁平 `{name, quality, count}` 的 ReadOnly 聚合视图；`insert_plan` 才是带 `{id, items.in_inventory[]}` 结构的 per-slot 列表。要把模块 / 弹药按蓝图指定的槽位插进实体，**必须**走 `insert_plan`。旧代码读 `item_requests` 按 `BlueprintInsertPlan` 解析会静默失败（每个元素的 `.id` 都是 nil）。
 - **`ghost.revive{}` 要显式传 `return_item_request_proxy = true`**：这个参数在 API 页上没文档，但 2.0 时代的实测 Mod（quantum-fabrication 等）都这么传。不传可能拿不到 proxy。
@@ -121,6 +118,5 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 - `LuaEntity::revive{ raise_revive, return_item_request_proxy }`
 - `LuaEntity::insert_plan`（array[BlueprintInsertPlan]，per-slot 蓝图插入计划）vs `LuaEntity::item_requests`（扁平 ItemWithQualityCounts，只读聚合）
 - `LuaEntity::tick_grown`、`tree_stage_index`、`tree_stage_index_max`（Gleba PlantPrototype 成熟判定）
-- `defines.inventory.spider_trunk`、`defines.inventory.spider_ammo`
 - `defines.build_mode.forced`
 - `defines.events.on_init`、`on_surface_created`

@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.4.0
+Date: 2026-05-05
+  Changes:
+    - Moved legendary spidertron spawning to LegendaryMechStart; BestLanding now only handles landing-area cleanup, resource seeding, and starter blueprints.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.3.0
 Date: 2026-04-25
   Changes:

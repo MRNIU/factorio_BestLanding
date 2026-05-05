@@ -29,10 +29,6 @@ return {
         aquilo   = 0,   -- 无敌人
     },
 
-    -- 蜘蛛落地找位置时逐级尝试的搜索半径
-    SPIDER_SEARCH_RADII = { 128, 256, 512 },
-    SPIDER_SEARCH_PRECISION = 1,
-
     -- Gleba 果树种植密度（0..1），每个 soil tile 独立判定
     GLEBA_TREE_DENSITY = 0.5,
 }

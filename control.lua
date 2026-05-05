@@ -5,11 +5,8 @@ local planets         = require("planets")
 local clean_area      = require("clean_area")
 local place_resources = require("place_resources")
 local apply_blueprint = require("apply_blueprint")
-local spawn_spider    = require("spawn_spider")
 
--- 流水线顺序：清理 → 铺资源 → 铺蓝图 → 生成蜘蛛。
--- 注意：蜘蛛在蓝图之后生成，用 find_non_colliding_position + 多半径 fallback
--- 绕开蓝图实体。如果蓝图把中心整块占满就只能退到 (0,0)，容 log 显示。
+-- 流水线顺序：清理 → 铺资源 → 铺蓝图。
 --
 -- 每个 stage 单独 pcall：单个 stage 抛错只让该 stage 的产物缺失，
 -- 不会让 on_init 整个炸掉（否则新存档会创建失败、用户连菜单都退不回去）
@@ -39,7 +36,6 @@ local function run_pipeline(surface)
     else
         log(("[BestLanding] apply_blueprint skipped on %s (setting disabled)"):format(surface.name))
     end
-    run_stage("spawn_spider",    spawn_spider.run,    surface)
 end
 
 --------------------------------------------------------------------------------

@@ -88,7 +88,7 @@ local function fulfill_item_requests(entity, proxy)
             end
         end
         -- plan.items.grid_count（装甲网格里的装备请求）暂不处理：
-        -- 本 Mod 的 5 个蓝图里没有带装备网格的实体（蜘蛛走 spawn_spider，不走蓝图）
+        -- 本 Mod 的 5 个蓝图里没有带装备网格的实体。
     end
 
     proxy.destroy()
