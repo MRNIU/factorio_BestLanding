@@ -13,17 +13,49 @@ local LOCKED_CHEAT_ENTITY_TYPES = {
     ["infinity-cargo-wagon"] = true,
 }
 
+local function is_resource_driver(entity)
+    local proto = entity and prototypes.entity[entity.name]
+    return proto and (proto.type == "mining-drill" or proto.type == "offshore-pump")
+end
+
+local function read_blueprint_entities(blueprint_string, surface_name)
+    if not blueprint_string or blueprint_string == "" then return nil end
+
+    local inventory = game.create_inventory(1)
+    local ok, entities = pcall(function()
+        local stack = inventory[1]
+        local import_result = stack.import_stack(blueprint_string)
+        if import_result ~= 0 then
+            log(("[BestLanding] inspect_blueprint: import_stack returned %d on %s")
+                :format(import_result, surface_name))
+        end
+        if not (stack.valid_for_read and stack.is_blueprint) then
+            return nil
+        end
+        return stack.get_blueprint_entities()
+    end)
+    inventory.destroy()
+
+    if not ok then
+        log(("[BestLanding] inspect_blueprint: error on %s: %s")
+            :format(surface_name, tostring(entities)))
+        return nil
+    end
+    return entities
+end
+
 --------------------------------------------------------------------------------
 -- 蓝图本地坐标 → surface 坐标：先按 MapDirection 旋转，再平移 anchor
 
 local function transform_pos(pos, anchor, direction)
     local x, y = pos.x, pos.y
-    -- MapDirection：0=N, 2=E, 4=S, 6=W（每 2 单位 = 90°）
-    if direction == 2 then
+    -- MapDirection：0=N, 4=E, 8=S, 12=W（每 4 单位 = 90°）
+    direction = (direction or 0) % 16
+    if direction == 4 then
         x, y = -y, x
-    elseif direction == 4 then
+    elseif direction == 8 then
         x, y = -x, -y
-    elseif direction == 6 then
+    elseif direction == 12 then
         x, y = y, -x
     end
     return { x = x + anchor.x, y = y + anchor.y }
@@ -129,10 +161,12 @@ end
 --------------------------------------------------------------------------------
 -- 应用单个蓝图
 
-local function apply(surface, cfg, blueprint_string, anchor, direction)
+local function apply(surface, cfg, blueprint_string, anchor, direction, opts)
     if not blueprint_string or blueprint_string == "" then
         return false, "empty blueprint"
     end
+
+    local seed_resources = opts and opts.seed_resources == true
 
     -- 临时库存承载 BlueprintItem；pcall 保证即便中途抛错也 destroy，不泄漏
     local inventory = game.create_inventory(1)
@@ -161,18 +195,20 @@ local function apply(surface, cfg, blueprint_string, anchor, direction)
             clean.clean_blueprint_area(surface, aabb)
         end
 
-        resources.place_blueprint_resources(
-            surface,
-            cfg,
-            blueprint_entities,
-            function(entity)
-                local entity_direction = entity.direction or 0
-                return {
-                    position = transform_pos(entity.position, anchor, direction),
-                    direction = (entity_direction + direction) % 8,
-                }
-            end
-        )
+        if seed_resources then
+            resources.place_blueprint_resources(
+                surface,
+                cfg,
+                blueprint_entities,
+                function(entity)
+                    local entity_direction = entity.direction or 0
+                    return {
+                        position = transform_pos(entity.position, anchor, direction),
+                        direction = (entity_direction + direction) % 16,
+                    }
+                end
+            )
+        end
 
         -- 直接 build_blueprint：forced 模式下 tile 直接铺（不走 tile ghost），
         -- 实体生成为 ghost 等我们手动 revive。不再手动 set_tiles——旧代码那段
@@ -216,7 +252,7 @@ end
 --------------------------------------------------------------------------------
 -- 阶段入口
 
-function M.run(surface, cfg)
+function M.run(surface, cfg, opts)
     if not (surface and surface.valid) then return end
 
     -- blueprints 是 { lowercase_surface_name = { entry, entry, ... } } 结构，
@@ -226,9 +262,28 @@ function M.run(surface, cfg)
 
     for _, bp in ipairs(entries) do
         if bp.data then
-            apply(surface, cfg, bp.data, bp.pos or { x = 0, y = 0 }, bp.direction or 0)
+            apply(surface, cfg, bp.data, bp.pos or { x = 0, y = 0 }, bp.direction or 0, opts)
         end
     end
+end
+
+function M.has_resource_drivers(surface)
+    if not (surface and surface.valid) then return false end
+
+    local entries = blueprints[string.lower(surface.name)]
+    if not entries then return false end
+
+    for _, bp in ipairs(entries) do
+        local entities = read_blueprint_entities(bp.data, surface.name)
+        for _, entity in pairs(entities or {}) do
+            if is_resource_driver(entity) then
+                log(("[BestLanding] resource drivers found in starter blueprint on %s")
+                    :format(surface.name))
+                return true
+            end
+        end
+    end
+    return false
 end
 
 return M

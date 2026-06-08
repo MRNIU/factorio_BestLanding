@@ -8,6 +8,17 @@ local M = {}
 
 local PUMPJACK_NAME = "pumpjack"
 local DEFAULT_COLUMNS_PER_RESOURCE = 2
+local SMALL_RESOURCE_CELL_ORDER = {
+    -- 0-based 网格坐标；每格仍是 4×8，只是优先分散到 32×32 槽内的锚点。
+    { col = 1, row = 1 },
+    { col = 5, row = 1 },
+    { col = 1, row = 2 },
+    { col = 5, row = 2 },
+    { col = 3, row = 0 },
+    { col = 3, row = 3 },
+    { col = 7, row = 0 },
+    { col = 7, row = 3 },
+}
 
 --------------------------------------------------------------------------------
 -- band area 计算（半开区间：right_bottom 不含边界）
@@ -22,8 +33,16 @@ end
 
 local function small_cell_area(origin, slot_index, cell_index)
     local columns = math.floor(C.RESOURCE_SLOT_SIZE / C.TILE_RESOURCE_WIDTH)
-    local col = cell_index % columns
-    local row = math.floor(cell_index / columns)
+    local rows = math.floor(C.RESOURCE_SLOT_SIZE / C.TILE_RESOURCE_HEIGHT)
+    local ordered = SMALL_RESOURCE_CELL_ORDER[cell_index + 1]
+    local col = ordered and ordered.col or (cell_index % columns)
+    local row = ordered and ordered.row or math.floor(cell_index / columns)
+
+    if col >= columns or row >= rows then
+        col = cell_index % columns
+        row = math.floor(cell_index / columns)
+    end
+
     local x0 = origin.x + slot_index * C.RESOURCE_SLOT_SIZE + col * C.TILE_RESOURCE_WIDTH
     local y0 = origin.y + row * C.TILE_RESOURCE_HEIGHT
     return {
@@ -184,8 +203,10 @@ local function place_fluid_source(surface, resource_name, position, placed)
         return
     end
 
-    local x = math.floor(position.x + 0.5)
-    local y = math.floor(position.y + 0.5)
+    -- 蓝图里的泵类实体通常落在半格中心；资源 tile 要取实体所在 tile，
+    -- 不能四舍五入到右下角，否则 pumpjack 会找不到流体源。
+    local x = math.floor(position.x)
+    local y = math.floor(position.y)
     local key = x .. "," .. y
     if placed[key] then return end
 
@@ -303,13 +324,18 @@ local function mining_area(position, radius)
     }
 end
 
+local function cardinal_direction(direction)
+    return (math.floor(((direction or 0) % 16 + 2) / 4) * 4) % 16
+end
+
 local function rotate_vector(vector, direction)
     local x, y = vector.x or vector[1], vector.y or vector[2]
-    if direction == 2 then
+    direction = cardinal_direction(direction)
+    if direction == 4 then
         x, y = -y, x
-    elseif direction == 4 then
+    elseif direction == 8 then
         x, y = -x, -y
-    elseif direction == 6 then
+    elseif direction == 12 then
         x, y = y, -x
     end
     return { x = x, y = y }
@@ -319,58 +345,13 @@ local function offset_position(position, offset)
     return { x = position.x + offset.x, y = position.y + offset.y }
 end
 
-local function offshore_tile_area(entity)
+local function offshore_source_tile(entity)
     local proto = prototypes.entity[entity.name]
     local offset = proto and proto.fluid_source_offset
     if not offset then return nil end
 
     local source = offset_position(entity.position, rotate_vector(offset, entity.direction or 0))
-    local direction = entity.direction or 0
-    if direction == 2 then
-        return {
-            left_top = {
-                x = math.floor(source.x),
-                y = math.floor(source.y - C.TILE_RESOURCE_WIDTH / 2),
-            },
-            right_bottom = {
-                x = math.floor(source.x) + C.TILE_RESOURCE_HEIGHT,
-                y = math.floor(source.y - C.TILE_RESOURCE_WIDTH / 2) + C.TILE_RESOURCE_WIDTH,
-            },
-        }
-    elseif direction == 6 then
-        return {
-            left_top = {
-                x = math.floor(source.x) - C.TILE_RESOURCE_HEIGHT + 1,
-                y = math.floor(source.y - C.TILE_RESOURCE_WIDTH / 2),
-            },
-            right_bottom = {
-                x = math.floor(source.x) + 1,
-                y = math.floor(source.y - C.TILE_RESOURCE_WIDTH / 2) + C.TILE_RESOURCE_WIDTH,
-            },
-        }
-    elseif direction == 4 then
-        return {
-            left_top = {
-                x = math.floor(source.x - C.TILE_RESOURCE_WIDTH / 2),
-                y = math.floor(source.y),
-            },
-            right_bottom = {
-                x = math.floor(source.x - C.TILE_RESOURCE_WIDTH / 2) + C.TILE_RESOURCE_WIDTH,
-                y = math.floor(source.y) + C.TILE_RESOURCE_HEIGHT,
-            },
-        }
-    end
-
-    return {
-        left_top = {
-            x = math.floor(source.x - C.TILE_RESOURCE_WIDTH / 2),
-            y = math.floor(source.y) - C.TILE_RESOURCE_HEIGHT + 1,
-        },
-        right_bottom = {
-            x = math.floor(source.x - C.TILE_RESOURCE_WIDTH / 2) + C.TILE_RESOURCE_WIDTH,
-            y = math.floor(source.y) + 1,
-        },
-    }
+    return { x = math.floor(source.x), y = math.floor(source.y) }
 end
 
 local function collect_columns(entities, transform, predicate, build)
@@ -396,11 +377,20 @@ local function collect_columns(entities, transform, predicate, build)
     return columns
 end
 
-local function place_column_resources(surface, label, layout, columns, place)
+local function column_resource_name(resources, columns_per_resource, column_index, repeat_last_resource)
+    local resource_index = math.floor((column_index - 1) / columns_per_resource) + 1
+    if repeat_last_resource and #resources > 0 and resource_index > #resources then
+        resource_index = #resources
+    end
+    return resources[resource_index]
+end
+
+local function place_column_resources(surface, label, layout, columns, place, opts)
     if not layout then return end
 
     local resources = layout.resources or {}
     local columns_per_resource = layout.columns_per_resource or DEFAULT_COLUMNS_PER_RESOURCE
+    local repeat_last_resource = opts and opts.repeat_last_resource == true
 
     if #columns == 0 then
         log(("[BestLanding] %s: no matching blueprint entities found on %s")
@@ -411,8 +401,12 @@ local function place_column_resources(surface, label, layout, columns, place)
     local placed = {}
     local assigned = 0
     for column_index, column in ipairs(columns) do
-        local resource_index = math.floor((column_index - 1) / columns_per_resource) + 1
-        local resource_name = resources[resource_index]
+        local resource_name = column_resource_name(
+            resources,
+            columns_per_resource,
+            column_index,
+            repeat_last_resource
+        )
         if resource_name then
             for _, drill in ipairs(column.drills) do
                 place(surface, resource_name, drill, placed)
@@ -426,6 +420,71 @@ local function place_column_resources(surface, label, layout, columns, place)
 
     log(("[BestLanding] %s: seeded %d entities across %d columns on %s")
         :format(label, assigned, #columns, surface.name))
+end
+
+local function extend_bounds(bounds, position)
+    if not position then return end
+
+    if not bounds.left_top then
+        bounds.left_top = { x = position.x, y = position.y }
+        bounds.right_bottom = { x = position.x + 1, y = position.y + 1 }
+        return
+    end
+
+    if position.x < bounds.left_top.x then bounds.left_top.x = position.x end
+    if position.y < bounds.left_top.y then bounds.left_top.y = position.y end
+    if position.x + 1 > bounds.right_bottom.x then bounds.right_bottom.x = position.x + 1 end
+    if position.y + 1 > bounds.right_bottom.y then bounds.right_bottom.y = position.y + 1 end
+end
+
+local function place_offshore_pump_resources(surface, cfg, entities, transform)
+    local layout = cfg.blueprint_tile_resources
+    if not layout then return end
+
+    local columns = collect_columns(entities, transform, is_offshore_pump, function(entity, transformed)
+        return {
+            name = entity.name,
+            position = transformed.position,
+            direction = transformed.direction,
+        }
+    end)
+    if #columns == 0 then
+        log(("[BestLanding] blueprint_tile_resources: no matching blueprint entities found on %s")
+            :format(surface.name))
+        return
+    end
+
+    local resources = layout.resources or {}
+    local columns_per_resource = layout.columns_per_resource or DEFAULT_COLUMNS_PER_RESOURCE
+    local bounds_by_resource = {}
+    local assigned = 0
+
+    for column_index, column in ipairs(columns) do
+        local tile_name = column_resource_name(resources, columns_per_resource, column_index, true)
+        if tile_name then
+            local bounds = bounds_by_resource[tile_name]
+            if not bounds then
+                bounds = {}
+                bounds_by_resource[tile_name] = bounds
+            end
+            for _, pump in ipairs(column.drills) do
+                extend_bounds(bounds, offshore_source_tile(pump))
+                assigned = assigned + 1
+            end
+        else
+            log(("[BestLanding] blueprint_tile_resources: no resource configured for column %d on %s")
+                :format(column_index, surface.name))
+        end
+    end
+
+    for tile_name, bounds in pairs(bounds_by_resource) do
+        if bounds.left_top then
+            place_tile_area(surface, tile_name, bounds, {})
+        end
+    end
+
+    log(("[BestLanding] blueprint_tile_resources: seeded %d entities across %d columns on %s")
+        :format(assigned, #columns, surface.name))
 end
 
 function M.place_blueprint_resources(surface, cfg, entities, transform)
@@ -462,24 +521,7 @@ function M.place_blueprint_resources(surface, cfg, entities, transform)
         end
     )
 
-    place_column_resources(
-        surface,
-        "blueprint_tile_resources",
-        cfg.blueprint_tile_resources,
-        collect_columns(entities, transform, is_offshore_pump, function(entity, transformed)
-            return {
-                name = entity.name,
-                position = transformed.position,
-                direction = transformed.direction,
-            }
-        end),
-        function(s, tile_name, pump, placed)
-            local area = offshore_tile_area(pump)
-            if area then
-                place_tile_area(s, tile_name, area, placed)
-            end
-        end
-    )
+    place_offshore_pump_resources(surface, cfg, entities, transform)
 end
 
 return M

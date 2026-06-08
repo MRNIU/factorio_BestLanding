@@ -37,11 +37,11 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
   - `script.on_init(...)` 对 Nauvis 跑一次（`on_surface_created` 对新存档时已存在的 Nauvis 不触发）。
   - `script.on_event(on_surface_created, ...)` 对其他行星触发，用 `surface.planet ~= nil` 排除太空平台。
   - pipeline 顺序：`clean_area.run` → `place_resources.run` → `apply_blueprint.run`。
-  - 起始蓝图启用时，`place_resources.run` 跳过固定固体矿 / 普通 tile / fluid，三类资源改由 `apply_blueprint.run` 根据蓝图里的矿机 / offshore pump / pumpjack 列铺设；起始蓝图关闭时固定资源仍作为 fallback 生成。
+  - 资源生成模式由 runtime-global 设置 `BestLanding-resource-placement-mode` 控制：`auto` 会在起始蓝图含 mining drill / offshore pump / pumpjack 时跳过固定固体矿 / 普通 tile / fluid，改由蓝图驱动铺资源；`fixed` 强制只用 `origin + bands` 固定资源；`blueprint` 强制跳过固定资源并尝试按蓝图实体铺资源。起始蓝图关闭时固定资源仍作为 fallback 生成。
 
 - **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`RESOURCE_SLOT_SIZE=32`、`ORE_BAND_WIDTH=32`、`ORE_BAND_HEIGHT=32`、`TILE_RESOURCE_WIDTH=4`、`TILE_RESOURCE_HEIGHT=8`、`GLEBA_TILE_BAND_WIDTH=32`、`GLEBA_TILE_BAND_HEIGHT=64`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`、`GLEBA_TREE_DENSITY`。
 
-- **`planets.lua`** — 五颗行星的 single source of truth。每颗一个 `{ default_tile, enemy_cleanup, origin, bands, blueprint_mining?, blueprint_tile_resources?, blueprint_fluid_sources? }`。`bands` 是有序数组，每条 `{ kind = "ore"|"tile"|"fluid", name, plant? }`，主要作为蓝图关闭时的 fallback。固体矿默认占一个 32×32 资源槽；普通 tile / fluid 共用一个 32×32 资源槽里的 4×8 小格；带 `plant` 的 Gleba tile 暂时保持 32×64 大条布局。`blueprint_mining.resources` / `blueprint_tile_resources.resources` / `blueprint_fluid_sources.resources` 分别定义蓝图里的矿机 / offshore pump / pumpjack 列从左到右对应的资源顺序，默认每 2 列实体一组。
+- **`planets.lua`** — 五颗行星的 single source of truth。每颗一个 `{ default_tile, enemy_cleanup, origin, bands, blueprint_mining?, blueprint_tile_resources?, blueprint_fluid_sources? }`。`bands` 是有序数组，每条 `{ kind = "ore"|"tile"|"fluid", name, plant? }`，主要作为蓝图关闭时或资源模式为 `fixed` 时的 fallback；固体矿默认占一个 32×32 资源槽；普通 tile / fluid 共用一个 32×32 资源槽里的 4×8 小格，并按固定锚点分散到槽内，避免油井和水/lava 等 tile 贴得太近；带 `plant` 的 Gleba tile 暂时保持 32×64 大条布局。`blueprint_mining.resources` / `blueprint_tile_resources.resources` / `blueprint_fluid_sources.resources` 分别定义蓝图里的矿机 / offshore pump / pumpjack 列从左到右对应的资源顺序，默认每 2 列实体一组。
 
 - **`chunks.lua`** — `force_generate` / `force_generate_ring`。批量 `request_to_generate_chunks` + 单次 `force_generate_chunk_requests` 是官方推荐姿势。ring 变体用于 Vulcanus Demolisher 扫描扩围：清理区已经由 `force_generate` 生成过，只补外环 chunk 就够了。
 
@@ -49,7 +49,7 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
   - `run` 流程：`force_generate` 清理区 → `find_entities` 一次扫光非玩家实体（不再第二次 filter 资源 / 悬崖，`find_entities` 已经包含）→ `cleanup_enemies` 按 `cfg.enemy_cleanup.filters` 清扩围 → `set_tiles` 全刷 `cfg.default_tile`。
   - `clean_blueprint_area` 给 `apply_blueprint` 用，只清树 / 简单实体 / 悬崖，不动矿。
 
-- **`place_resources.lua`** — `run(surface, cfg, opts)` 遍历 `cfg.bands`，按 kind 走三个分支；`opts.skip_blueprint_driven=true` 时跳过固定固体矿、普通 tile、fluid，只保留 Gleba 果树土条等非蓝图驱动资源。`place_blueprint_resources(surface, cfg, entities, transform)` 在蓝图 build 前扫描 mining drill / offshore pump / pumpjack，按 x 坐标归并成列，从左到右每 `columns_per_resource` 列对应配置里的一个资源，并分别在矿机采矿半径内 `create_entity` 固体矿、在 offshore pump 的 source tile 附近 `set_tiles`、在 pumpjack 中心 `create_entity` 流体源。普通 tile / fluid fallback 共享一个 32×32 资源槽并按 4×8 小格对齐，流体源在小格中心单次 `create_entity` amount=`FLUID_AMOUNT`。Gleba 的 `tile` 条如果带 `plant = "yumako"|"jellynut"`，暂时走 32×64 大条布局，`set_tiles` 完后按 `GLEBA_TREE_DENSITY` 概率 `create_entity` 果树。**果树名字注意**：yumako 树是 `"yumako-tree"`，但 jellynut 树叫 `"jellystem"`（"jellynut" 是果子 item，不是树 entity）。**成熟**靠设 `tree.tick_grown = game.tick`——Gleba 果树是 `PlantPrototype`，成熟判定看 `tick_grown` 这个 MapTick，不是 `tree_stage_index`（后者只影响贴图阶段）。
+- **`place_resources.lua`** — `run(surface, cfg, opts)` 遍历 `cfg.bands`，按 kind 走三个分支；`opts.skip_blueprint_driven=true` 时跳过固定固体矿、普通 tile、fluid，只保留 Gleba 果树土条等非蓝图驱动资源。`place_blueprint_resources(surface, cfg, entities, transform)` 在蓝图 build 前扫描 mining drill / offshore pump / pumpjack，按 x 坐标归并成列，从左到右每 `columns_per_resource` 列对应配置里的一个资源，并分别在矿机采矿半径内 `create_entity` 固体矿、在 offshore pump 的 source tile 附近 `set_tiles`、在 pumpjack 中心 `create_entity` 流体源。普通 tile / fluid fallback 共享一个 32×32 资源槽并按 4×8 小格对齐；小格不再顺序紧贴排布，而是先落到槽内分散锚点，流体源在小格中心单次 `create_entity` amount=`FLUID_AMOUNT`。Gleba 的 `tile` 条如果带 `plant = "yumako"|"jellynut"`，暂时走 32×64 大条布局，`set_tiles` 完后按 `GLEBA_TREE_DENSITY` 概率 `create_entity` 果树。**果树名字注意**：yumako 树是 `"yumako-tree"`，但 jellynut 树叫 `"jellystem"`（"jellynut" 是果子 item，不是树 entity）。**成熟**靠设 `tree.tick_grown = game.tick`——Gleba 果树是 `PlantPrototype`，成熟判定看 `tick_grown` 这个 MapTick，不是 `tree_stage_index`（后者只影响贴图阶段）。
 
 - **`apply_blueprint.lua`** — `run(surface, cfg)`。遍历 `blueprints` 表匹配 `surface.name`（小写比较）。单个蓝图流程：
   1. 临时 `game.create_inventory(1)` + `stack.import_stack(...)` + 校验 `valid_for_read and is_blueprint`。
@@ -74,7 +74,7 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 ### 星球配置 → 资源 → 蓝图 的契约
 
-`planets.lua` 里每颗星球的 `origin + bands` 决定蓝图关闭时 fallback 资源在 surface 上的落点；起始蓝图启用时，固体矿 / 地块资源 / 流体源位置分别由蓝图里的 mining drill / offshore pump / pumpjack 列决定，资源类型由 `blueprint_mining.resources` / `blueprint_tile_resources.resources` / `blueprint_fluid_sources.resources` 决定。所以：
+`planets.lua` 里每颗星球的 `origin + bands` 决定蓝图关闭时或资源模式为 `fixed` 时 fallback 资源在 surface 上的落点；资源模式为 `blueprint`，或资源模式为 `auto` 且起始蓝图包含 mining drill / offshore pump / pumpjack 时，固体矿 / 地块资源 / 流体源位置分别由蓝图里的 mining drill / offshore pump / pumpjack 列决定，资源类型由 `blueprint_mining.resources` / `blueprint_tile_resources.resources` / `blueprint_fluid_sources.resources` 决定。所以：
 
 - 改 `origin` / `bands` 顺序 / band 宽高 = 蓝图关闭时 fallback 资源落点会变。
 - 改 `blueprint_*_resources.resources` 顺序 = 从左到右的实体列组对应资源会变。

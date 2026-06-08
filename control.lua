@@ -24,19 +24,40 @@ local function apply_blueprints_enabled()
     return s == nil or s.value
 end
 
+local function resource_placement_mode()
+    local s = settings.global["BestLanding-resource-placement-mode"]
+    local value = s and s.value
+    if value == "fixed" or value == "blueprint" then
+        return value
+    end
+    return "auto"
+end
+
+local function use_blueprint_driven_resources(surface, blueprints_enabled)
+    if not blueprints_enabled then return false end
+
+    local mode = resource_placement_mode()
+    if mode == "fixed" then return false end
+    if mode == "blueprint" then return true end
+    return apply_blueprint.has_resource_drivers(surface)
+end
+
 local function run_pipeline(surface)
     if not (surface and surface.valid) then return end
     local cfg = planets[surface.name]
     if not cfg then return end
 
     local blueprints_enabled = apply_blueprints_enabled()
+    local blueprint_driven_resources = use_blueprint_driven_resources(surface, blueprints_enabled)
 
     run_stage("clean_area",      clean_area.run,      surface, cfg)
     run_stage("place_resources", place_resources.run, surface, cfg, {
-        skip_blueprint_driven = blueprints_enabled,
+        skip_blueprint_driven = blueprint_driven_resources,
     })
     if blueprints_enabled then
-        run_stage("apply_blueprint", apply_blueprint.run, surface, cfg)
+        run_stage("apply_blueprint", apply_blueprint.run, surface, cfg, {
+            seed_resources = blueprint_driven_resources,
+        })
     else
         log(("[BestLanding] apply_blueprint skipped on %s (setting disabled)"):format(surface.name))
     end

@@ -12,4 +12,12 @@ data:extend({
         default_value = true,
         order         = "a-blueprints",
     },
+    {
+        type           = "string-setting",
+        name           = "BestLanding-resource-placement-mode",
+        setting_type   = "runtime-global",
+        default_value  = "auto",
+        allowed_values = { "auto", "fixed", "blueprint" },
+        order          = "b-resource-placement",
+    },
 })

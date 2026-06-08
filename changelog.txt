@@ -1,4 +1,35 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.4.10
+Date: 2026-06-08
+  Changes:
+    - Changed blueprint-driven offshore-pump tile resources to build one shared tile patch from the pump source-tile bounds instead of expanding a separate patch from every pump.
+
+---------------------------------------------------------------------------------------------------
+Version: 1.4.9
+Date: 2026-06-08
+  Changes:
+    - Fixed blueprint-driven pumpjack fluid sources and offshore-pump tile resources by using Factorio 2.0 16-direction blueprint rotation and tile-floor placement for pumpjack resources.
+    - Reused the last configured blueprint tile resource for extra offshore-pump columns so one water, lava, or ocean resource definition can support every pump around the generated patch.
+
+---------------------------------------------------------------------------------------------------
+Version: 1.4.8
+Date: 2026-06-08
+  Changes:
+    - Added a resource placement mode setting with auto, fixed, and blueprint-driven options; auto skips fixed fallback resources when the starter blueprint contains resource driver entities.
+
+---------------------------------------------------------------------------------------------------
+Version: 1.4.7
+Date: 2026-06-08
+  Changes:
+    - Spread small fixed-layout tile resources and fluid sources across aligned anchors inside their shared 32x32 resource slot instead of packing them into adjacent cells.
+
+---------------------------------------------------------------------------------------------------
+Version: 1.4.6
+Date: 2026-06-08
+  Changes:
+    - Keep the fixed Nauvis resource layout active when starter blueprints are enabled, so the configured (-96, -192) resource row is actually placed.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.4.5
 Date: 2026-06-08
   Changes:
