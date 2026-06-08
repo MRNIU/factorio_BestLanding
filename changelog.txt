@@ -1,4 +1,37 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.4.5
+Date: 2026-06-08
+  Changes:
+    - Move Nauvis fallback resources to start at (-96, -192) and order them as iron, copper, stone, coal, crude oil plus water, then uranium.
+
+---------------------------------------------------------------------------------------------------
+Version: 1.4.4
+Date: 2026-06-08
+  Changes:
+    - Lock starter-blueprint infinity containers, infinity pipes, and infinity cargo wagons from player operation, mining, rotation, and destruction while preserving extraction and fluid output behavior.
+
+---------------------------------------------------------------------------------------------------
+Version: 1.4.3
+Date: 2026-06-08
+  Changes:
+    - Seed ordinary tile resources from starter blueprint offshore pump columns before applying the blueprint.
+    - Seed fluid resource entities from starter blueprint pumpjack columns before applying the blueprint.
+
+---------------------------------------------------------------------------------------------------
+Version: 1.4.2
+Date: 2026-06-08
+  Changes:
+    - Seed solid ore resources from starter blueprint mining-drill columns before applying the blueprint, using two drill columns per configured resource.
+    - Keep fixed solid ore patches as a fallback when starter blueprints are disabled.
+
+---------------------------------------------------------------------------------------------------
+Version: 1.4.1
+Date: 2026-06-07
+  Changes:
+    - Reduced solid ore starter patches to 32x32 tiles.
+    - Packed ordinary tile resources and fluid sources into a shared 32x32 resource slot using aligned 4x8 cells, while leaving Gleba plant-soil bands unchanged for now.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.4.0
 Date: 2026-05-05
   Changes:

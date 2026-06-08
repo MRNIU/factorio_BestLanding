@@ -10,9 +10,10 @@ A Factorio 2.0 mod that cleans up the landing area and seeds planet-appropriate 
   - Vulcanus — 300-tile expand ring, removes `segmented-unit` Demolishers whose territories would otherwise still cover the landing zone.
   - Gleba — 256-tile expand ring, removes pentapod nests (`unit-spawner`).
   - Fulgora / Aquilo — no enemies, no expand.
-- **Planet-specific resource seeding**: places ores, fluid sources, and tile resources tuned for each Space Age planet. Fluid sources (crude oil, sulfuric acid geysers, lithium brine, fluorine vents) are seeded at `uint32` max so they effectively never run dry.
+- **Planet-specific resource seeding**: places solid ore under starter-blueprint mining drills, tile resources near offshore pumps, and fluid sources under pumpjacks by column group. Fluid sources (crude oil, sulfuric acid geysers, lithium brine, fluorine vents) are seeded at `uint32` max so they effectively never run dry.
 - **Gleba fruit trees**: overgrowth soil bands are pre-planted with mature, fruit-bearing yumako trees and jellystem trees (~50% density). You can harvest immediately — no waiting for growth.
 - **Starter blueprints**: each supported planet has its own blueprint applied on arrival. Modules, filters, and ammo embedded in the blueprint are delivered into each revived entity via the Factorio 2.0 `insert_plan` API, so quality items land in the correct inventory slot (for example, productivity modules inside recyclers go to the module slot, not the recycling input queue).
+- **Locked supply entities**: infinity containers, infinity pipes, and infinity cargo wagons embedded in starter blueprints are locked after placement so players cannot open, configure, rotate, mine, or destroy them. Inserters and fluid networks can still extract from them.
 - **Runs on every new planet**: both on the initial Nauvis spawn (`on_init`) and every time `on_surface_created` fires for a new planet surface. Orbital space platforms are skipped via `surface.planet` filter.
 
 ## Disclaimer

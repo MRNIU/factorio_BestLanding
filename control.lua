@@ -29,10 +29,14 @@ local function run_pipeline(surface)
     local cfg = planets[surface.name]
     if not cfg then return end
 
+    local blueprints_enabled = apply_blueprints_enabled()
+
     run_stage("clean_area",      clean_area.run,      surface, cfg)
-    run_stage("place_resources", place_resources.run, surface, cfg)
-    if apply_blueprints_enabled() then
-        run_stage("apply_blueprint", apply_blueprint.run, surface)
+    run_stage("place_resources", place_resources.run, surface, cfg, {
+        skip_blueprint_driven = blueprints_enabled,
+    })
+    if blueprints_enabled then
+        run_stage("apply_blueprint", apply_blueprint.run, surface, cfg)
     else
         log(("[BestLanding] apply_blueprint skipped on %s (setting disabled)"):format(surface.name))
     end

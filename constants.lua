@@ -8,9 +8,20 @@ return {
     -- 清理区半边长（从 (0,0) 向四周延伸）：总 448×448，覆盖 14×14 chunk
     CLEAR_RADIUS = 224,
 
-    -- 单条资源条的尺寸；和 blueprint.lua 里的蓝图严格契合，不要改
-    BAND_WIDTH  = 32,
-    BAND_HEIGHT = 64,
+    -- 资源槽尺寸：常规资源按 32×32 的列槽水平排布
+    RESOURCE_SLOT_SIZE = 32,
+
+    -- 固体矿占满一个资源槽
+    ORE_BAND_WIDTH  = 32,
+    ORE_BAND_HEIGHT = 32,
+
+    -- 普通地块资源占资源槽里的 4×8 小格；流体源也按同一小格对齐
+    TILE_RESOURCE_WIDTH  = 4,
+    TILE_RESOURCE_HEIGHT = 8,
+
+    -- Gleba 果树土条暂时保持旧布局，后续单独处理
+    GLEBA_TILE_BAND_WIDTH  = 32,
+    GLEBA_TILE_BAND_HEIGHT = 64,
 
     -- 固体矿每 tile 的储量（uint32 范围内）
     ORE_PER_TILE = 8192,

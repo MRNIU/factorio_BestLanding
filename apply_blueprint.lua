@@ -3,8 +3,15 @@
 
 local clean      = require("clean_area")
 local blueprints = require("blueprints")
+local resources  = require("place_resources")
 
 local M = {}
+
+local LOCKED_CHEAT_ENTITY_TYPES = {
+    ["infinity-container"] = true,
+    ["infinity-pipe"] = true,
+    ["infinity-cargo-wagon"] = true,
+}
 
 --------------------------------------------------------------------------------
 -- 蓝图本地坐标 → surface 坐标：先按 MapDirection 旋转，再平移 anchor
@@ -43,6 +50,31 @@ local function compute_aabb(entities, tiles, anchor, direction)
         left_top     = { x = min_x, y = min_y },
         right_bottom = { x = max_x, y = max_y },
     }
+end
+
+--------------------------------------------------------------------------------
+-- 锁定蓝图里的作弊实体：保留输出能力，但禁止玩家操作 / 拆除 / 破坏
+
+local function safe_set_entity_flag(entity, field, value)
+    local ok, err = pcall(function()
+        entity[field] = value
+    end)
+    if not ok then
+        log(("[BestLanding] lock_cheat_entity: failed to set %s on %s: %s")
+            :format(field, entity.name, tostring(err)))
+    end
+end
+
+local function lock_cheat_entity(entity)
+    if not (entity and entity.valid and LOCKED_CHEAT_ENTITY_TYPES[entity.type]) then return end
+
+    safe_set_entity_flag(entity, "minable_flag", false)
+    safe_set_entity_flag(entity, "destructible", false)
+    safe_set_entity_flag(entity, "operable", false)
+    safe_set_entity_flag(entity, "rotatable", false)
+
+    log(("[BestLanding] locked cheat entity %s at %.1f, %.1f")
+        :format(entity.name, entity.position.x, entity.position.y))
 end
 
 --------------------------------------------------------------------------------
@@ -97,7 +129,7 @@ end
 --------------------------------------------------------------------------------
 -- 应用单个蓝图
 
-local function apply(surface, blueprint_string, anchor, direction)
+local function apply(surface, cfg, blueprint_string, anchor, direction)
     if not blueprint_string or blueprint_string == "" then
         return false, "empty blueprint"
     end
@@ -116,15 +148,31 @@ local function apply(surface, blueprint_string, anchor, direction)
             error("stack is not a valid blueprint after import")
         end
 
+        local blueprint_entities = stack.get_blueprint_entities()
+        local blueprint_tiles = stack.get_blueprint_tiles()
+
         -- 先算蓝图在 surface 上的 AABB，清掉范围内的树 / 简单实体 / 悬崖
         local aabb = compute_aabb(
-            stack.get_blueprint_entities(),
-            stack.get_blueprint_tiles(),
+            blueprint_entities,
+            blueprint_tiles,
             anchor, direction
         )
         if aabb then
             clean.clean_blueprint_area(surface, aabb)
         end
+
+        resources.place_blueprint_resources(
+            surface,
+            cfg,
+            blueprint_entities,
+            function(entity)
+                local entity_direction = entity.direction or 0
+                return {
+                    position = transform_pos(entity.position, anchor, direction),
+                    direction = (entity_direction + direction) % 8,
+                }
+            end
+        )
 
         -- 直接 build_blueprint：forced 模式下 tile 直接铺（不走 tile ghost），
         -- 实体生成为 ghost 等我们手动 revive。不再手动 set_tiles——旧代码那段
@@ -150,6 +198,7 @@ local function apply(surface, blueprint_string, anchor, direction)
                 }
                 if revived_entity then
                     fulfill_item_requests(revived_entity, proxy)
+                    lock_cheat_entity(revived_entity)
                 end
             end
         end
@@ -167,7 +216,7 @@ end
 --------------------------------------------------------------------------------
 -- 阶段入口
 
-function M.run(surface)
+function M.run(surface, cfg)
     if not (surface and surface.valid) then return end
 
     -- blueprints 是 { lowercase_surface_name = { entry, entry, ... } } 结构，
@@ -177,7 +226,7 @@ function M.run(surface)
 
     for _, bp in ipairs(entries) do
         if bp.data then
-            apply(surface, bp.data, bp.pos or { x = 0, y = 0 }, bp.direction or 0)
+            apply(surface, cfg, bp.data, bp.pos or { x = 0, y = 0 }, bp.direction or 0)
         end
     end
 end

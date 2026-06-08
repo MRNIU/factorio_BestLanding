@@ -37,10 +37,11 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
   - `script.on_init(...)` 对 Nauvis 跑一次（`on_surface_created` 对新存档时已存在的 Nauvis 不触发）。
   - `script.on_event(on_surface_created, ...)` 对其他行星触发，用 `surface.planet ~= nil` 排除太空平台。
   - pipeline 顺序：`clean_area.run` → `place_resources.run` → `apply_blueprint.run`。
+  - 起始蓝图启用时，`place_resources.run` 跳过固定固体矿 / 普通 tile / fluid，三类资源改由 `apply_blueprint.run` 根据蓝图里的矿机 / offshore pump / pumpjack 列铺设；起始蓝图关闭时固定资源仍作为 fallback 生成。
 
-- **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`BAND_WIDTH=32`、`BAND_HEIGHT=64`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`、`GLEBA_TREE_DENSITY`。
+- **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`RESOURCE_SLOT_SIZE=32`、`ORE_BAND_WIDTH=32`、`ORE_BAND_HEIGHT=32`、`TILE_RESOURCE_WIDTH=4`、`TILE_RESOURCE_HEIGHT=8`、`GLEBA_TILE_BAND_WIDTH=32`、`GLEBA_TILE_BAND_HEIGHT=64`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`、`GLEBA_TREE_DENSITY`。
 
-- **`planets.lua`** — 五颗行星的 single source of truth。每颗一个 `{ default_tile, enemy_cleanup, origin, bands }`。`bands` 是有序数组，每条 `{ kind = "ore"|"tile"|"fluid", name, plant? }`。`origin` + band 顺序和 `blueprints.lua` 严格绑定，**动这里之前确认蓝图对得上**。
+- **`planets.lua`** — 五颗行星的 single source of truth。每颗一个 `{ default_tile, enemy_cleanup, origin, bands, blueprint_mining?, blueprint_tile_resources?, blueprint_fluid_sources? }`。`bands` 是有序数组，每条 `{ kind = "ore"|"tile"|"fluid", name, plant? }`，主要作为蓝图关闭时的 fallback。固体矿默认占一个 32×32 资源槽；普通 tile / fluid 共用一个 32×32 资源槽里的 4×8 小格；带 `plant` 的 Gleba tile 暂时保持 32×64 大条布局。`blueprint_mining.resources` / `blueprint_tile_resources.resources` / `blueprint_fluid_sources.resources` 分别定义蓝图里的矿机 / offshore pump / pumpjack 列从左到右对应的资源顺序，默认每 2 列实体一组。
 
 - **`chunks.lua`** — `force_generate` / `force_generate_ring`。批量 `request_to_generate_chunks` + 单次 `force_generate_chunk_requests` 是官方推荐姿势。ring 变体用于 Vulcanus Demolisher 扫描扩围：清理区已经由 `force_generate` 生成过，只补外环 chunk 就够了。
 
@@ -48,14 +49,16 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
   - `run` 流程：`force_generate` 清理区 → `find_entities` 一次扫光非玩家实体（不再第二次 filter 资源 / 悬崖，`find_entities` 已经包含）→ `cleanup_enemies` 按 `cfg.enemy_cleanup.filters` 清扩围 → `set_tiles` 全刷 `cfg.default_tile`。
   - `clean_blueprint_area` 给 `apply_blueprint` 用，只清树 / 简单实体 / 悬崖，不动矿。
 
-- **`place_resources.lua`** — `run(surface, cfg)`。遍历 `cfg.bands`，按 kind 走三个分支。流体条在中心单次 `create_entity` amount=`FLUID_AMOUNT`。Gleba 的 `tile` 条如果带 `plant = "yumako"|"jellynut"`，`set_tiles` 完后按 `GLEBA_TREE_DENSITY` 概率 `create_entity` 果树。**果树名字注意**：yumako 树是 `"yumako-tree"`，但 jellynut 树叫 `"jellystem"`（"jellynut" 是果子 item 的名字，不是树 entity）。**成熟**靠设 `tree.tick_grown = game.tick`——Gleba 果树是 `PlantPrototype`，成熟判定看 `tick_grown` 这个 MapTick，不是 `tree_stage_index`（后者只影响贴图阶段）。
+- **`place_resources.lua`** — `run(surface, cfg, opts)` 遍历 `cfg.bands`，按 kind 走三个分支；`opts.skip_blueprint_driven=true` 时跳过固定固体矿、普通 tile、fluid，只保留 Gleba 果树土条等非蓝图驱动资源。`place_blueprint_resources(surface, cfg, entities, transform)` 在蓝图 build 前扫描 mining drill / offshore pump / pumpjack，按 x 坐标归并成列，从左到右每 `columns_per_resource` 列对应配置里的一个资源，并分别在矿机采矿半径内 `create_entity` 固体矿、在 offshore pump 的 source tile 附近 `set_tiles`、在 pumpjack 中心 `create_entity` 流体源。普通 tile / fluid fallback 共享一个 32×32 资源槽并按 4×8 小格对齐，流体源在小格中心单次 `create_entity` amount=`FLUID_AMOUNT`。Gleba 的 `tile` 条如果带 `plant = "yumako"|"jellynut"`，暂时走 32×64 大条布局，`set_tiles` 完后按 `GLEBA_TREE_DENSITY` 概率 `create_entity` 果树。**果树名字注意**：yumako 树是 `"yumako-tree"`，但 jellynut 树叫 `"jellystem"`（"jellynut" 是果子 item，不是树 entity）。**成熟**靠设 `tree.tick_grown = game.tick`——Gleba 果树是 `PlantPrototype`，成熟判定看 `tick_grown` 这个 MapTick，不是 `tree_stage_index`（后者只影响贴图阶段）。
 
-- **`apply_blueprint.lua`** — `run(surface)`。遍历 `blueprints` 表匹配 `surface.name`（小写比较）。单个蓝图流程：
+- **`apply_blueprint.lua`** — `run(surface, cfg)`。遍历 `blueprints` 表匹配 `surface.name`（小写比较）。单个蓝图流程：
   1. 临时 `game.create_inventory(1)` + `stack.import_stack(...)` + 校验 `valid_for_read and is_blueprint`。
   2. `compute_aabb` — **把蓝图本地坐标按 anchor + direction 变换到 surface 坐标**再算 AABB。这是修过的 bug：旧代码直接拿 blueprint-relative 坐标当 surface 坐标用，只因所有蓝图 `pos={0,0} direction=0` 巧合工作。
   3. `clean.clean_blueprint_area(surface, aabb)` 清树 / 简单实体 / 悬崖。
-  4. `stack.build_blueprint{ build_mode = defines.build_mode.forced }`。forced 模式下 tile 直接落地，**不再手动 `set_tiles`**（旧代码那段是冗余且坐标没变换）。
-  5. 对每个 ghost 调 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`。
+  4. `place_resources.place_blueprint_resources(...)` 根据蓝图里的矿机 / offshore pump / pumpjack 列，先铺对应固体矿、地块资源和流体源。
+  5. `stack.build_blueprint{ build_mode = defines.build_mode.forced }`。forced 模式下 tile 直接落地，**不再手动 `set_tiles`**（旧代码那段是冗余且坐标没变换）。
+  6. 对每个 ghost 调 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`。
+  7. 如果 revive 出来的实体是 `infinity-container` / `infinity-pipe` / `infinity-cargo-wagon`，立刻设 `minable_flag=false`、`destructible=false`、`operable=false`、`rotatable=false`。这类蓝图里的作弊供给实体只作为只读补给源存在：玩家不能打开设置界面、旋转、拆除或破坏它们，但 inserter / 管网仍然可以从里面取物品或抽流体。
   - `fulfill_item_requests` — **用 `proxy.insert_plan`，不是 `proxy.item_requests`**。LuaEntity 上这两个字段格式完全不同：
     - `LuaEntity::item_requests :: ItemWithQualityCounts`（只读）—— 扁平 `[{name, quality, count}, ...]`，没有 slot 信息
     - `LuaEntity::insert_plan :: array[BlueprintInsertPlan]`（读写）—— per-slot `[{id={name, quality}, items={in_inventory=[{inventory, stack, count}, ...], grid_count?}}, ...]`
@@ -69,12 +72,13 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 - **`blueprints.lua`** — 五颗行星各一个蓝图字符串 + 一个 `{ name, data, pos, direction }` 列表。`apply_blueprint` 的匹配是 `string.lower(bp.name) == string.lower(surface.name)`，所以表里大小写怎么写都行。
 
-### 星球配置 → 资源条 → 蓝图 的契约
+### 星球配置 → 资源 → 蓝图 的契约
 
-`planets.lua` 里每颗星球的 `origin + bands` 决定了矿 / tile / 流体在 surface 上的落点，蓝图字符串是按照这个落点手搓的。所以：
+`planets.lua` 里每颗星球的 `origin + bands` 决定蓝图关闭时 fallback 资源在 surface 上的落点；起始蓝图启用时，固体矿 / 地块资源 / 流体源位置分别由蓝图里的 mining drill / offshore pump / pumpjack 列决定，资源类型由 `blueprint_mining.resources` / `blueprint_tile_resources.resources` / `blueprint_fluid_sources.resources` 决定。所以：
 
-- 改 `origin` / `bands` 顺序 / band 宽高 = 蓝图对不齐。
-- 改 band 的 `name`（资源类型） = 蓝图可能落空（比如蓝图里的 pumpjack 对着的位置不再是 crude-oil 了）。
+- 改 `origin` / `bands` 顺序 / band 宽高 = 蓝图关闭时 fallback 资源落点会变。
+- 改 `blueprint_*_resources.resources` 顺序 = 从左到右的实体列组对应资源会变。
+- 改 band 的 `name`（资源类型） = fallback 资源类型会变。
 - 改 `ORE_PER_TILE` / `FLUID_AMOUNT` = 安全（只是数值，蓝图不依赖）。
 
 ### 状态模型（Factorio 2.0）
@@ -90,6 +94,7 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 - **`ghost.revive{}` 要显式传 `return_item_request_proxy = true`**：这个参数在 API 页上没文档，但 2.0 时代的实测 Mod（quantum-fabrication 等）都这么传。不传可能拿不到 proxy。
 - **Gleba 果树命名坑**：yumako 的树是 `"yumako-tree"`，jellynut 的树叫 `"jellystem"`——"jellynut" 只是果子 item 的名字。猜错名字会导致半个星球的 soil 上没树。
 - **Gleba 果树成熟靠 `tick_grown`，不是 `tree_stage_index`**：`PlantPrototype` 的成熟判定看 `LuaEntity::tick_grown` 这个 MapTick，`tree_stage_index` 只影响贴图阶段。要让树一落地就能采，设 `tree.tick_grown = game.tick`。
+- **蓝图里的永续管 / 永续箱要在 revive 后锁定**：蓝图字符串本身不改；`build_blueprint` 只给 ghost，必须等 `ghost.revive{...}` 返回真实 `LuaEntity` 后才能设置 `minable_flag` / `destructible` / `operable` / `rotatable`。`operable=false` 会禁止玩家打开作弊实体 GUI，但不应阻断 inserter 或管网抽取。
 
 ## 本地化
 
