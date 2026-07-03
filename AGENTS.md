@@ -4,9 +4,9 @@
 
 ## 项目定位
 
-Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署的 Mod——以 `%APPDATA%/Factorio/mods/BestLanding/` 的形式被游戏直接加载。没有构建步骤、没有包管理器、没有测试。改代码后重启 Factorio（或重载存档）即生效。
+Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署的 Mod——以 `%APPDATA%/Factorio/mods/BestLanding/` 的形式被游戏直接加载。没有构建步骤、没有包管理器、没有测试。改代码后重启 Factorio（或重载存档）即生效。
 
-`info.json` 声明的依赖：`base >= 2.0.76`、`space-age`、`quality`。本 Mod 仅运行时，覆盖 Space Age 所有五颗行星 surface（`nauvis`、`vulcanus`、`gleba`、`fulgora`、`aquilo`）。
+`info.json` 声明的依赖：`base >= 2.1.9`、`space-age`、`quality`。本 Mod 仅运行时，覆盖 Space Age 所有五颗行星 surface（`nauvis`、`vulcanus`、`gleba`、`fulgora`、`aquilo`）。
 
 ## 兄弟 Mod
 
@@ -21,9 +21,9 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 ## 常用命令
 
-- **运行 / 迭代**：启动 Factorio，启用本 Mod，开新游戏（或者着陆到新行星触发第二次及以后的清理）。（注：Claude Code 跑在 WSL、Mod 文件通过 Windows 挂载访问，Claude 无法直接启动 Factorio 或 FactorioModDebug；运行验证需要你在 Windows 侧手工操作。）
+- **运行 / 迭代**：启动 Factorio，启用本 Mod，开新游戏（或者着陆到新行星触发第二次及以后的清理）。（注：Claude Code 跑在 WSL、Mod 文件通过 Windows 挂载访问，Claude 无法直接启动 Factorio 或 Factorio Modding Tool Kit；运行验证需要你在 Windows 侧手工操作。）
 - **语法检查 / 预提交**：改完任何 `.lua` 后跑一次 `for f in *.lua; do luac5.4 -p "$f" || break; done`（全 Mod 扫一遍 < 100ms），能抓 `end` 缺失 / 括号不匹配 / 字符串没闭合等语法问题；**不查语义**（undefined global、类型错误等）。提交前养成这个习惯可以避免把纯语法错推到 Mod portal。
-- **调试**：`.vscode/launch.json` 里配好了 [FactorioModDebug](https://marketplace.visualstudio.com/items?itemName=justarandomgeek.factoriomod-debug) 的启动项，追控制流时优先用它。
+- **调试**：`.vscode/launch.json` 使用 Factorio Modding Tool Kit 2.1+ 的原生 `factorio` 调试适配器（Factorio 2.1 的 `--dap`），追控制流时优先用它。
 - **打包发布**：打包为 `BestLanding_<version>.zip`，压缩包最外层是文件夹本身。版本号必须和 `info.json`、`changelog.txt` 顶条一致。
 - **Changelog 格式**：Factorio 严格格式（99 个 `-`、`Version:`、`Date:`、缩进 `Changes:`），英文。
 
@@ -81,7 +81,7 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 - 改 band 的 `name`（资源类型） = fallback 资源类型会变。
 - 改 `ORE_PER_TILE` / `FLUID_AMOUNT` = 安全（只是数值，蓝图不依赖）。
 
-### 状态模型（Factorio 2.0）
+### 状态模型（Factorio 2.1）
 
 目前不维护任何持久状态，`storage` 是空的。如果以后需要，记得在 `on_init` 里初始化。
 
@@ -90,8 +90,8 @@ Factorio 2.0 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 - **`find_entities_*` / `set_tiles` 之前 chunk 必须先生成完**：未生成的 chunk 上前者返回空、后者无效果。`clean_area.lua` 和 `apply_blueprint` 的 `clean_blueprint_area` 都先走 `chunks.force_generate`。
 - **Demolisher 的领地会越过本体位置**：`ENEMY_EXPAND.vulcanus = 300` 不是拍脑袋，缩了会让领地重新覆盖着陆区。
 - **资源条 amount 是 uint32**：`FLUID_AMOUNT` 必须 ≤ `0xFFFFFFFF`。旧代码 `8192*1024*512 = 2^32` 溢出。
-- **`item_requests` 和 `insert_plan` 是两个不同字段**（Factorio 2.0 里最容易踩的陷阱）：`item_requests` 是扁平 `{name, quality, count}` 的 ReadOnly 聚合视图；`insert_plan` 才是带 `{id, items.in_inventory[]}` 结构的 per-slot 列表。要把模块 / 弹药按蓝图指定的槽位插进实体，**必须**走 `insert_plan`。旧代码读 `item_requests` 按 `BlueprintInsertPlan` 解析会静默失败（每个元素的 `.id` 都是 nil）。
-- **`ghost.revive{}` 要显式传 `return_item_request_proxy = true`**：这个参数在 API 页上没文档，但 2.0 时代的实测 Mod（quantum-fabrication 等）都这么传。不传可能拿不到 proxy。
+- **`item_requests` 和 `insert_plan` 是两个不同字段**（Factorio 2.1 里仍然最容易踩的陷阱）：`item_requests` 是扁平 `{name, quality, count}` 的 ReadOnly 聚合视图；`insert_plan` 才是带 `{id, items.in_inventory[]}` 结构的 per-slot 列表。要把模块 / 弹药按蓝图指定的槽位插进实体，**必须**走 `insert_plan`。旧代码读 `item_requests` 按 `BlueprintInsertPlan` 解析会静默失败（每个元素的 `.id` 都是 nil）。
+- **`ghost.revive{}` 要显式传 `return_item_request_proxy = true`**：这个参数在 API 页上没文档，但 2.x 时代的实测 Mod（quantum-fabrication 等）都这么传。不传可能拿不到 proxy。
 - **Gleba 果树命名坑**：yumako 的树是 `"yumako-tree"`，jellynut 的树叫 `"jellystem"`——"jellynut" 只是果子 item 的名字。猜错名字会导致半个星球的 soil 上没树。
 - **Gleba 果树成熟靠 `tick_grown`，不是 `tree_stage_index`**：`PlantPrototype` 的成熟判定看 `LuaEntity::tick_grown` 这个 MapTick，`tree_stage_index` 只影响贴图阶段。要让树一落地就能采，设 `tree.tick_grown = game.tick`。
 - **蓝图里的永续管 / 永续箱要在 revive 后锁定**：蓝图字符串本身不改；`build_blueprint` 只给 ghost，必须等 `ghost.revive{...}` 返回真实 `LuaEntity` 后才能设置 `minable_flag` / `destructible` / `operable` / `rotatable`。`operable=false` 会禁止玩家打开作弊实体 GUI，但不应阻断 inserter 或管网抽取。
