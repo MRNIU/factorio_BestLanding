@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.7.0
+Date: 2026-07-18
+  Changes:
+    - Removed the resource placement mode setting and the fixed fallback resource layouts.
+    - Starter resources are now inferred exclusively from mining drills, offshore pumps, and pumpjacks in the selected blueprint layers.
+    - Removed the fixed Gleba fruit-tree soil bands; disabling starter blueprints now also disables starter-resource generation.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.6.0
 Date: 2026-07-18
   Changes:

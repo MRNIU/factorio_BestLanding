@@ -12,14 +12,6 @@ data:extend({
         default_value = true,
         order         = "a-blueprints",
     },
-    {
-        type           = "string-setting",
-        name           = "BestLanding-resource-placement-mode",
-        setting_type   = "runtime-global",
-        default_value  = "auto",
-        allowed_values = { "auto", "fixed", "blueprint" },
-        order          = "b-resource-placement",
-    },
 })
 
 local planet_names = {
@@ -38,7 +30,7 @@ for index, planet_name in ipairs(planet_names) do
         setting_type   = "runtime-global",
         default_value  = "basic",
         allowed_values = { "basic", "powered", "production" },
-        order          = ("c-base-level-%d-%s"):format(index, planet_name),
+        order          = ("b-base-level-%d-%s"):format(index, planet_name),
     }
 end
 

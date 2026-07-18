@@ -3,10 +3,9 @@
 
 local planets         = require("planets")
 local clean_area      = require("clean_area")
-local place_resources = require("place_resources")
 local apply_blueprint = require("apply_blueprint")
 
--- 流水线顺序：清理 → 铺资源 → 铺蓝图。
+-- 流水线顺序：清理 → 蓝图驱动资源 + 铺蓝图。
 --
 -- 每个 stage 单独 pcall：单个 stage 抛错只让该 stage 的产物缺失，
 -- 不会让 on_init 整个炸掉（否则新存档会创建失败、用户连菜单都退不回去）
@@ -24,15 +23,6 @@ local function apply_blueprints_enabled()
     return s == nil or s.value
 end
 
-local function resource_placement_mode()
-    local s = settings.global["BestLanding-resource-placement-mode"]
-    local value = s and s.value
-    if value == "fixed" or value == "blueprint" then
-        return value
-    end
-    return "auto"
-end
-
 local BASE_LEVELS = {
     basic = 1,
     powered = 2,
@@ -45,15 +35,6 @@ local function selected_base_level(surface)
     return BASE_LEVELS[setting and setting.value] or BASE_LEVELS.basic
 end
 
-local function use_blueprint_driven_resources(surface, blueprints_enabled, base_level)
-    if not blueprints_enabled then return false end
-
-    local mode = resource_placement_mode()
-    if mode == "fixed" then return false end
-    if mode == "blueprint" then return true end
-    return apply_blueprint.has_resource_drivers(surface, base_level)
-end
-
 local function run_pipeline(surface)
     if not (surface and surface.valid) then return end
     local cfg = planets[surface.name]
@@ -61,19 +42,10 @@ local function run_pipeline(surface)
 
     local blueprints_enabled = apply_blueprints_enabled()
     local base_level = selected_base_level(surface)
-    local blueprint_driven_resources = use_blueprint_driven_resources(
-        surface,
-        blueprints_enabled,
-        base_level
-    )
 
-    run_stage("clean_area",      clean_area.run,      surface, cfg)
-    run_stage("place_resources", place_resources.run, surface, cfg, {
-        skip_blueprint_driven = blueprint_driven_resources,
-    })
+    run_stage("clean_area", clean_area.run, surface, cfg)
     if blueprints_enabled then
         run_stage("apply_blueprint", apply_blueprint.run, surface, cfg, {
-            seed_resources = blueprint_driven_resources,
             max_level = base_level,
         })
     else

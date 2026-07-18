@@ -10,8 +10,7 @@ A Factorio 2.1 mod that cleans up the landing area and seeds planet-appropriate 
   - Vulcanus — 300-tile expand ring, removes `segmented-unit` Demolishers whose territories would otherwise still cover the landing zone.
   - Gleba — 256-tile expand ring, removes pentapod nests (`unit-spawner`).
   - Fulgora / Aquilo — no enemies, no expand.
-- **Planet-specific resource seeding**: Resources can use a fixed fallback row, follow starter-blueprint resource driver entities, or switch automatically. In auto mode, blueprints with mining drills, offshore pumps, or pumpjacks skip the fixed fallback and seed matching resources by column group. Fluid sources (crude oil, sulfuric acid geysers, lithium brine, fluorine vents) are seeded at `uint32` max so they effectively never run dry.
-- **Gleba fruit trees**: overgrowth soil bands are pre-planted with mature, fruit-bearing yumako trees and jellystem trees (~50% density). You can harvest immediately — no waiting for growth.
+- **Blueprint-driven resource seeding**: starter resources are inferred exclusively from mining drills, offshore pumps, and pumpjacks in the selected blueprint layers. Solid ores, source tiles, and fluid sources are assigned by column group; there is no fixed fallback layout. Fluid sources are seeded at `uint32` max so they effectively never run dry.
 - **Three-level starter bases**: each planet independently supports a basic base, a powered base that adds a power-system blueprint, and a production base that additionally adds a production-facility blueprint. Higher levels cumulatively apply all lower-level layers.
 - **Starter blueprint initialization**: modules, filters, and ammo embedded in a blueprint are delivered into each revived entity via the Factorio 2.1 `insert_plan` API, so quality items land in the correct inventory slot. Every revived entity starts with a full electric energy buffer, and each roboport receives one normal-quality stack each of construction robots, logistic robots, and repair packs.
 - **Locked supply entities**: infinity containers, infinity pipes, and infinity cargo wagons embedded in starter blueprints are locked after placement so players cannot open, configure, rotate, mine, or destroy them. Inserters and fluid networks can still extract from them.
@@ -28,7 +27,7 @@ Blueprints bundled with this mod come from the Factorio community. All credit be
 
 ## Settings
 
-The global starter-blueprint toggle can disable all blueprint layers. When enabled, each supported planet has its own base-level selector:
+The global starter-blueprint toggle disables both blueprint placement and starter-resource generation. When enabled, each supported planet has its own base-level selector:
 
 - **Level 1 — Basic base**: applies only the basic blueprint.
 - **Level 2 — Powered base**: applies the basic blueprint, then the power-system blueprint.
