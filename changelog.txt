@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.5.1
+Date: 2026-07-18
+  Changes:
+    - Fully charged the electric energy buffer of every entity revived from a starter blueprint.
+    - Added one normal-quality stack each of construction robots, logistic robots, and repair packs to every starter-blueprint roboport.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.5.0
 Date: 2026-07-03
   Changes:

@@ -58,7 +58,8 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
   4. `place_resources.place_blueprint_resources(...)` 根据蓝图里的矿机 / offshore pump / pumpjack 列，先铺对应固体矿、地块资源和流体源。
   5. `stack.build_blueprint{ build_mode = defines.build_mode.forced }`。forced 模式下 tile 直接落地，**不再手动 `set_tiles`**（旧代码那段是冗余且坐标没变换）。
   6. 对每个 ghost 调 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`。
-  7. 如果 revive 出来的实体是 `infinity-container` / `infinity-pipe` / `infinity-cargo-wagon`，立刻设 `minable_flag=false`、`destructible=false`、`operable=false`、`rotatable=false`。这类蓝图里的作弊供给实体只作为只读补给源存在：玩家不能打开设置界面、旋转、拆除或破坏它们，但 inserter / 管网仍然可以从里面取物品或抽流体。
+  7. 每个 revive 出来的实体都会把 `electric_buffer_size` 对应的电能缓冲充满；`roboport` 还会在机器人 / 材料库存中分别追加一组普通品质的建筑机器人、物流机器人和修理包。
+  8. 如果 revive 出来的实体是 `infinity-container` / `infinity-pipe` / `infinity-cargo-wagon`，立刻设 `minable_flag=false`、`destructible=false`、`operable=false`、`rotatable=false`。这类蓝图里的作弊供给实体只作为只读补给源存在：玩家不能打开设置界面、旋转、拆除或破坏它们，但 inserter / 管网仍然可以从里面取物品或抽流体。
   - `fulfill_item_requests` — **用 `proxy.insert_plan`，不是 `proxy.item_requests`**。LuaEntity 上这两个字段格式完全不同：
     - `LuaEntity::item_requests :: ItemWithQualityCounts`（只读）—— 扁平 `[{name, quality, count}, ...]`，没有 slot 信息
     - `LuaEntity::insert_plan :: array[BlueprintInsertPlan]`（读写）—— per-slot `[{id={name, quality}, items={in_inventory=[{inventory, stack, count}, ...], grid_count?}}, ...]`

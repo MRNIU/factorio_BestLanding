@@ -13,6 +13,16 @@ local LOCKED_CHEAT_ENTITY_TYPES = {
     ["infinity-cargo-wagon"] = true,
 }
 
+local ROBOPORT_SUPPLIES = {
+    robot = {
+        "construction-robot",
+        "logistic-robot",
+    },
+    material = {
+        "repair-pack",
+    },
+}
+
 local function is_resource_driver(entity)
     local proto = entity and prototypes.entity[entity.name]
     return proto and (proto.type == "mining-drill" or proto.type == "offshore-pump")
@@ -107,6 +117,48 @@ local function lock_cheat_entity(entity)
 
     log(("[BestLanding] locked cheat entity %s at %.1f, %.1f")
         :format(entity.name, entity.position.x, entity.position.y))
+end
+
+--------------------------------------------------------------------------------
+-- 初始化蓝图实体：充满电能缓冲，并为机器人指令平台补充一组常用品
+
+local function insert_normal_stack(entity, inventory_id, item_name)
+    local inventory = entity.get_inventory(inventory_id)
+    local item = prototypes.item[item_name]
+    if not (inventory and item) then
+        log(("[BestLanding] initialize_blueprint_entity: missing inventory or item %s on %s")
+            :format(item_name, entity.name))
+        return
+    end
+
+    local want = item.stack_size
+    local inserted = inventory.insert {
+        name = item_name,
+        count = want,
+        quality = "normal",
+    }
+    if inserted < want then
+        log(("[BestLanding] initialize_blueprint_entity: inserted %d/%d of %s (q=normal) into %s")
+            :format(inserted, want, item_name, entity.name))
+    end
+end
+
+local function initialize_blueprint_entity(entity)
+    if not (entity and entity.valid) then return end
+
+    local buffer_size = entity.electric_buffer_size
+    if buffer_size and buffer_size > 0 then
+        entity.energy = buffer_size
+    end
+
+    if entity.type ~= "roboport" then return end
+
+    for _, item_name in ipairs(ROBOPORT_SUPPLIES.robot) do
+        insert_normal_stack(entity, defines.inventory.roboport_robot, item_name)
+    end
+    for _, item_name in ipairs(ROBOPORT_SUPPLIES.material) do
+        insert_normal_stack(entity, defines.inventory.roboport_material, item_name)
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -234,6 +286,7 @@ local function apply(surface, cfg, blueprint_string, anchor, direction, opts)
                 }
                 if revived_entity then
                     fulfill_item_requests(revived_entity, proxy)
+                    initialize_blueprint_entity(revived_entity)
                     lock_cheat_entity(revived_entity)
                 end
             end
