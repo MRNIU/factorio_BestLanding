@@ -313,26 +313,32 @@ function M.run(surface, cfg, opts)
     local entries = blueprints[string.lower(surface.name)]
     if not entries then return end
 
+    local max_level = (opts and opts.max_level) or 1
     for _, bp in ipairs(entries) do
-        if bp.data then
+        local level = bp.level or 1
+        if level <= max_level and bp.data and bp.data ~= "" then
             apply(surface, cfg, bp.data, bp.pos or { x = 0, y = 0 }, bp.direction or 0, opts)
         end
     end
 end
 
-function M.has_resource_drivers(surface)
+function M.has_resource_drivers(surface, max_level)
     if not (surface and surface.valid) then return false end
 
     local entries = blueprints[string.lower(surface.name)]
     if not entries then return false end
 
+    max_level = max_level or 1
     for _, bp in ipairs(entries) do
-        local entities = read_blueprint_entities(bp.data, surface.name)
-        for _, entity in pairs(entities or {}) do
-            if is_resource_driver(entity) then
-                log(("[BestLanding] resource drivers found in starter blueprint on %s")
-                    :format(surface.name))
-                return true
+        local level = bp.level or 1
+        if level <= max_level and bp.data and bp.data ~= "" then
+            local entities = read_blueprint_entities(bp.data, surface.name)
+            for _, entity in pairs(entities or {}) do
+                if is_resource_driver(entity) then
+                    log(("[BestLanding] resource drivers found in level %d starter blueprint on %s")
+                        :format(level, surface.name))
+                    return true
+                end
             end
         end
     end

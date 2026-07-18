@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.6.0
+Date: 2026-07-18
+  Changes:
+    - Added an independent three-level starter-base setting for each supported planet.
+    - Added cumulative basic-base, power-system, and production-facility blueprint layers, with empty placeholders for the new power and production blueprints.
+    - Limited blueprint-driven resource detection to the blueprint layers selected for the current planet.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.5.1
 Date: 2026-07-18
   Changes:

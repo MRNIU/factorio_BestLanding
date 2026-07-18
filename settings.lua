@@ -21,3 +21,25 @@ data:extend({
         order          = "b-resource-placement",
     },
 })
+
+local planet_names = {
+    "nauvis",
+    "vulcanus",
+    "gleba",
+    "fulgora",
+    "aquilo",
+}
+
+local base_level_settings = {}
+for index, planet_name in ipairs(planet_names) do
+    base_level_settings[#base_level_settings + 1] = {
+        type           = "string-setting",
+        name           = "BestLanding-" .. planet_name .. "-base-level",
+        setting_type   = "runtime-global",
+        default_value  = "basic",
+        allowed_values = { "basic", "powered", "production" },
+        order          = ("c-base-level-%d-%s"):format(index, planet_name),
+    }
+end
+
+data:extend(base_level_settings)

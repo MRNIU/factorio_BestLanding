@@ -38,6 +38,7 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
   - `script.on_event(on_surface_created, ...)` 对其他行星触发，用 `surface.planet ~= nil` 排除太空平台。
   - pipeline 顺序：`clean_area.run` → `place_resources.run` → `apply_blueprint.run`。
   - 资源生成模式由 runtime-global 设置 `BestLanding-resource-placement-mode` 控制：`auto` 会在起始蓝图含 mining drill / offshore pump / pumpjack 时跳过固定固体矿 / 普通 tile / fluid，改由蓝图驱动铺资源；`fixed` 强制只用 `origin + bands` 固定资源；`blueprint` 强制跳过固定资源并尝试按蓝图实体铺资源。起始蓝图关闭时固定资源仍作为 fallback 生成。
+  - 五颗行星各有一个 `BestLanding-<planet>-base-level` runtime-global 设置：`basic=1`、`powered=2`、`production=3`。选中等级会从一级开始累计应用所有不高于该等级的蓝图层。
 
 - **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`RESOURCE_SLOT_SIZE=32`、`ORE_BAND_WIDTH=32`、`ORE_BAND_HEIGHT=32`、`TILE_RESOURCE_WIDTH=4`、`TILE_RESOURCE_HEIGHT=8`、`GLEBA_TILE_BAND_WIDTH=32`、`GLEBA_TILE_BAND_HEIGHT=64`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`、`GLEBA_TREE_DENSITY`。
 
@@ -71,11 +72,11 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
     参考实现：<https://github.com/refulgence/quantum-fabrication/blob/main/scripts/builder.lua>
   - 整段用 `pcall` 包起来，即便中途抛错也保证 `inventory.destroy()` 跑到。
 
-- **`blueprints.lua`** — 五颗行星各一个蓝图字符串 + 一个 `{ name, data, pos, direction }` 列表。`apply_blueprint` 的匹配是 `string.lower(bp.name) == string.lower(surface.name)`，所以表里大小写怎么写都行。
+- **`blueprints.lua`** — 五颗行星各有三个蓝图层：原有的行星同名变量是基础基地，`*Power` 是二级追加的供电系统，`*Production` 是三级追加的生产设施。表项格式为 `{ level, data, pos, direction }`；二、三级字符串默认留空，空层会被直接跳过。
 
 ### 星球配置 → 资源 → 蓝图 的契约
 
-`planets.lua` 里每颗星球的 `origin + bands` 决定蓝图关闭时或资源模式为 `fixed` 时 fallback 资源在 surface 上的落点；资源模式为 `blueprint`，或资源模式为 `auto` 且起始蓝图包含 mining drill / offshore pump / pumpjack 时，固体矿 / 地块资源 / 流体源位置分别由蓝图里的 mining drill / offshore pump / pumpjack 列决定，资源类型由 `blueprint_mining.resources` / `blueprint_tile_resources.resources` / `blueprint_fluid_sources.resources` 决定。所以：
+`planets.lua` 里每颗星球的 `origin + bands` 决定蓝图关闭时或资源模式为 `fixed` 时 fallback 资源在 surface 上的落点；资源模式为 `blueprint`，或资源模式为 `auto` 且起始蓝图包含 mining drill / offshore pump / pumpjack 时，固体矿 / 地块资源 / 流体源位置分别由蓝图里的 mining drill / offshore pump / pumpjack 列决定，资源类型由 `blueprint_mining.resources` / `blueprint_tile_resources.resources` / `blueprint_fluid_sources.resources` 决定。蓝图资源驱动检测只扫描当前行星设置选中的累计蓝图层。所以：
 
 - 改 `origin` / `bands` 顺序 / band 宽高 = 蓝图关闭时 fallback 资源落点会变。
 - 改 `blueprint_*_resources.resources` 顺序 = 从左到右的实体列组对应资源会变。

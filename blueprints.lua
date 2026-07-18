@@ -22,23 +22,47 @@ local Gleba =
 local Aquilo =
 ""
 
+-- 二级基地：在基础基地上叠加供电系统
+local NauvisPower = ""
+local VulcanusPower = ""
+local FulgoraPower = ""
+local GlebaPower = ""
+local AquiloPower = ""
+
+-- 三级基地：在二级基地上叠加生产设施
+local NauvisProduction = ""
+local VulcanusProduction = ""
+local FulgoraProduction = ""
+local GlebaProduction = ""
+local AquiloProduction = ""
+
 -- 按 surface.name (lower-case) 索引：apply_blueprint 直接 O(1) 查表，
 -- 不用线性遍历 + 字符串比较。同名行星支持多蓝图，所以 value 是 list
 blueprint = {
     nauvis = {
-        { data = Nauvis,   pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 1, data = Nauvis,           pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 2, data = NauvisPower,      pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 3, data = NauvisProduction, pos = { x = 0, y = 0 }, direction = 0 },
     },
     vulcanus = {
-        { data = Vulcanus, pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 1, data = Vulcanus,           pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 2, data = VulcanusPower,      pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 3, data = VulcanusProduction, pos = { x = 0, y = 0 }, direction = 0 },
     },
     fulgora = {
-        { data = Fulgora,  pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 1, data = Fulgora,           pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 2, data = FulgoraPower,      pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 3, data = FulgoraProduction, pos = { x = 0, y = 0 }, direction = 0 },
     },
     gleba = {
-        { data = Gleba,    pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 1, data = Gleba,           pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 2, data = GlebaPower,      pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 3, data = GlebaProduction, pos = { x = 0, y = 0 }, direction = 0 },
     },
     aquilo = {
-        { data = Aquilo,   pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 1, data = Aquilo,           pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 2, data = AquiloPower,      pos = { x = 0, y = 0 }, direction = 0 },
+        { level = 3, data = AquiloProduction, pos = { x = 0, y = 0 }, direction = 0 },
     },
 }
 

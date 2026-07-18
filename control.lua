@@ -33,13 +33,25 @@ local function resource_placement_mode()
     return "auto"
 end
 
-local function use_blueprint_driven_resources(surface, blueprints_enabled)
+local BASE_LEVELS = {
+    basic = 1,
+    powered = 2,
+    production = 3,
+}
+
+local function selected_base_level(surface)
+    local setting_name = "BestLanding-" .. surface.name .. "-base-level"
+    local setting = settings.global[setting_name]
+    return BASE_LEVELS[setting and setting.value] or BASE_LEVELS.basic
+end
+
+local function use_blueprint_driven_resources(surface, blueprints_enabled, base_level)
     if not blueprints_enabled then return false end
 
     local mode = resource_placement_mode()
     if mode == "fixed" then return false end
     if mode == "blueprint" then return true end
-    return apply_blueprint.has_resource_drivers(surface)
+    return apply_blueprint.has_resource_drivers(surface, base_level)
 end
 
 local function run_pipeline(surface)
@@ -48,7 +60,12 @@ local function run_pipeline(surface)
     if not cfg then return end
 
     local blueprints_enabled = apply_blueprints_enabled()
-    local blueprint_driven_resources = use_blueprint_driven_resources(surface, blueprints_enabled)
+    local base_level = selected_base_level(surface)
+    local blueprint_driven_resources = use_blueprint_driven_resources(
+        surface,
+        blueprints_enabled,
+        base_level
+    )
 
     run_stage("clean_area",      clean_area.run,      surface, cfg)
     run_stage("place_resources", place_resources.run, surface, cfg, {
@@ -57,6 +74,7 @@ local function run_pipeline(surface)
     if blueprints_enabled then
         run_stage("apply_blueprint", apply_blueprint.run, surface, cfg, {
             seed_resources = blueprint_driven_resources,
+            max_level = base_level,
         })
     else
         log(("[BestLanding] apply_blueprint skipped on %s (setting disabled)"):format(surface.name))
