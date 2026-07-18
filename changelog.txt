@@ -1,4 +1,23 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.9.0
+Date: 2026-07-18
+  Changes:
+    - Expanded each planet's starter-base architecture to four cumulative levels: basic, powered, mining, and production.
+    - Added empty per-planet mining-blueprint placeholders and moved existing production blueprints to level 4.
+    - Rebuilt blueprint ghosts after inferred resources are placed so mining drills remain valid and revive normally on generated ore.
+    - Treated resource-zone constant combinators as design-only markers and omitted them from the placed base.
+
+---------------------------------------------------------------------------------------------------
+Version: 1.8.1
+Date: 2026-07-18
+  Changes:
+    - Expanded blueprint obstacle cleanup to a 16-tile visual margin so tree canopies outside the collision area no longer obscure edge buildings.
+    - Preserved blueprint grid-snapping metadata while applying absolute offsets consistently to cleanup, resource inference, and scripted placement.
+    - Added a final obstacle cleanup pass from Factorio's actual ghost positions before reviving blueprint entities.
+    - Inferred the final resource-placement anchor from actual blueprint ghost positions so generated ores follow all blueprint offsets.
+    - Added aggregated logging for conflicting ore overlaps and failed resource-entity creation.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.8.0
 Date: 2026-07-18
   Changes:

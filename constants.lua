@@ -8,6 +8,9 @@ return {
     -- 清理区半边长（从 (0,0) 向四周延伸）：总 448×448，覆盖 14×14 chunk
     CLEAR_RADIUS = 224,
 
+    -- 蓝图完整占地之外额外清理的视觉缓冲，避免外围树冠遮住边缘建筑
+    BLUEPRINT_CLEAR_MARGIN = 16,
+
     -- 固体矿每 tile 的储量（uint32 范围内）
     ORE_PER_TILE = 8192,
 

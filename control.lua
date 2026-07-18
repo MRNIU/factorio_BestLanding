@@ -26,7 +26,8 @@ end
 local BASE_LEVELS = {
     basic = 1,
     powered = 2,
-    production = 3,
+    mining = 3,
+    production = 4,
 }
 
 local function selected_base_level(surface)

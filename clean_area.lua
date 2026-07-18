@@ -102,7 +102,7 @@ end
 function M.clean_blueprint_area(surface, area)
     if not (surface and surface.valid and area) then return end
 
-    local padded = expand_area(area, 5)
+    local padded = expand_area(area, C.BLUEPRINT_CLEAR_MARGIN)
     chunks.force_generate(surface, padded)
 
     local player_force = game.forces.player

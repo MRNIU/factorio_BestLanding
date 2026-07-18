@@ -29,7 +29,7 @@ for index, planet_name in ipairs(planet_names) do
         name           = "BestLanding-" .. planet_name .. "-base-level",
         setting_type   = "runtime-global",
         default_value  = "basic",
-        allowed_values = { "basic", "powered", "production" },
+        allowed_values = { "basic", "powered", "mining", "production" },
         order          = ("b-base-level-%d-%s"):format(index, planet_name),
     }
 end

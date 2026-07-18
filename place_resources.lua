@@ -49,7 +49,35 @@ local function place_fluid_source(surface, resource_name, position, placed)
     placed[key] = true
 end
 
-local function place_ore_tiles(surface, resource_name, area, placed)
+local function record_ore_overlap(overlaps, existing_resource, skipped_resource, x, y)
+    local key = existing_resource .. "\0" .. skipped_resource
+    local overlap = overlaps[key]
+    if not overlap then
+        overlap = {
+            existing_resource = existing_resource,
+            skipped_resource = skipped_resource,
+            count = 0,
+            first_position = { x = x, y = y },
+        }
+        overlaps[key] = overlap
+    end
+    overlap.count = overlap.count + 1
+end
+
+local function record_ore_create_failure(failures, resource_name, x, y)
+    local failure = failures[resource_name]
+    if not failure then
+        failure = {
+            resource_name = resource_name,
+            count = 0,
+            first_position = { x = x, y = y },
+        }
+        failures[resource_name] = failure
+    end
+    failure.count = failure.count + 1
+end
+
+local function place_ore_tiles(surface, resource_name, area, placed, overlaps, failures)
     if not prototypes.entity[resource_name] then
         log(("[BestLanding] place_ore_tiles: resource prototype %s not found, skipping")
             :format(tostring(resource_name)))
@@ -60,16 +88,61 @@ local function place_ore_tiles(surface, resource_name, area, placed)
         for y = area.left_top.y, area.right_bottom.y - 1 do
             local key = x .. "," .. y
             if not placed[key] then
-                surface.create_entity {
+                local created = surface.create_entity {
                     name                      = resource_name,
                     position                  = { x, y },
                     amount                    = C.ORE_PER_TILE,
                     raise_built               = false,
                     create_build_effect_smoke = false,
                 }
-                placed[key] = true
+                if not created then
+                    record_ore_create_failure(failures, resource_name, x, y)
+                end
+                placed[key] = resource_name
+            elseif placed[key] ~= resource_name then
+                record_ore_overlap(overlaps, placed[key], resource_name, x, y)
             end
         end
+    end
+end
+
+local function log_ore_overlaps(surface, overlaps)
+    local ordered = {}
+    for _, overlap in pairs(overlaps) do ordered[#ordered + 1] = overlap end
+    table.sort(ordered, function(a, b)
+        if a.existing_resource ~= b.existing_resource then
+            return a.existing_resource < b.existing_resource
+        end
+        return a.skipped_resource < b.skipped_resource
+    end)
+
+    for _, overlap in ipairs(ordered) do
+        log(("[BestLanding] blueprint mining overlap on %s: kept %s and skipped %s on %d tiles; first conflict at %d,%d")
+            :format(
+                surface.name,
+                overlap.existing_resource,
+                overlap.skipped_resource,
+                overlap.count,
+                overlap.first_position.x,
+                overlap.first_position.y
+            ))
+    end
+end
+
+local function log_ore_create_failures(surface, failures)
+    local ordered = {}
+    for _, failure in pairs(failures) do ordered[#ordered + 1] = failure end
+    table.sort(ordered, function(a, b) return a.resource_name < b.resource_name end)
+
+    for _, failure in ipairs(ordered) do
+        log(("[BestLanding] blueprint mining on %s: failed to create %s on %d tiles; first failure at %d,%d")
+            :format(
+                surface.name,
+                failure.resource_name,
+                failure.count,
+                failure.first_position.x,
+                failure.first_position.y
+            ))
     end
 end
 
@@ -100,6 +173,9 @@ local function is_resource_zone_marker(entity)
         and proto.type == "constant-combinator"
         and entity.player_description == RESOURCE_ZONE_DESCRIPTION
 end
+
+-- apply_blueprint 复用同一条判定规则，从正式放置结果里删除仅供设计时使用的标记。
+M.is_resource_zone_marker = is_resource_zone_marker
 
 local function resource_marker_signal(entity)
     local sections = entity.control_behavior
@@ -258,6 +334,8 @@ local function place_marked_ore_resources(surface, entities, transform)
     end
 
     local placed = {}
+    local overlaps = {}
+    local failures = {}
     local assigned = 0
     for _, drill in ipairs(collect_solid_drills(entities, transform)) do
         local resource_name
@@ -274,9 +352,11 @@ local function place_marked_ore_resources(surface, entities, transform)
         end
 
         if conflicting_resource then
-            log(("[BestLanding] blueprint mining drill %s on %s belongs to conflicting %s and %s zones; skipping")
+            log(("[BestLanding] blueprint mining drill %s at %.1f,%.1f on %s belongs to conflicting %s and %s zones; skipping")
                 :format(
                     tostring(drill.entity_number),
+                    drill.position.x,
+                    drill.position.y,
                     surface.name,
                     resource_name,
                     conflicting_resource
@@ -286,11 +366,16 @@ local function place_marked_ore_resources(surface, entities, transform)
                 surface,
                 resource_name,
                 mining_area(drill.position, drill.radius),
-                placed
+                placed,
+                overlaps,
+                failures
             )
             assigned = assigned + 1
         end
     end
+
+    log_ore_overlaps(surface, overlaps)
+    log_ore_create_failures(surface, failures)
 
     log(("[BestLanding] blueprint_mining: seeded %d drills from %d resource zones on %s")
         :format(assigned, #zones, surface.name))

@@ -55,6 +55,25 @@ local function transform_pos(pos, anchor, direction)
     return { x = rotated.x + anchor.x, y = rotated.y + anchor.y }
 end
 
+-- 绝对吸附蓝图的实体坐标包含 position-relative-to-grid 偏移。这里只读取
+-- 这个偏移并换算脚本放置所需的内容锚点，蓝图吸附设置本身保持原样。
+-- build_blueprint 接收显式位置，不会执行玩家光标的网格吸附，所以清理、
+-- 资源推断和实际建造都必须使用这个换算后的锚点。
+local function resolve_blueprint_content_anchor(stack, anchor, direction)
+    local resolved = { x = anchor.x, y = anchor.y }
+
+    if stack.blueprint_absolute_snapping then
+        local offset = stack.blueprint_position_relative_to_grid
+        if offset then
+            local rotated_offset = rotate_vector(offset, direction)
+            resolved.x = resolved.x - rotated_offset.x
+            resolved.y = resolved.y - rotated_offset.y
+        end
+    end
+
+    return resolved
+end
+
 -- 从蓝图 entities + tiles 的完整占地，换算出 surface 上的 AABB。
 -- 实体不能只看中心点，否则边缘大型建筑的碰撞箱会落到清理区之外。
 local function compute_aabb(entities, tiles, anchor, direction)
@@ -120,6 +139,177 @@ local function compute_aabb(entities, tiles, anchor, direction)
         left_top     = { x = min_x, y = min_y },
         right_bottom = { x = max_x, y = max_y },
     }
+end
+
+-- build_blueprint 返回的幽灵位置是 Factorio 最终采用的真实位置。revive 前再按
+-- 真实占地清一次障碍，避免任何实体占地差异留下树木或岩石。
+local function compute_runtime_aabb(entities)
+    local min_x, min_y =  math.huge,  math.huge
+    local max_x, max_y = -math.huge, -math.huge
+
+    for _, entity in pairs(entities or {}) do
+        if entity.valid then
+            local box = entity.bounding_box
+            if box then
+                local left_top = box.left_top or box[1]
+                local right_bottom = box.right_bottom or box[2]
+                local left = left_top.x or left_top[1]
+                local top = left_top.y or left_top[2]
+                local right = right_bottom.x or right_bottom[1]
+                local bottom = right_bottom.y or right_bottom[2]
+
+                if left < min_x then min_x = left end
+                if top < min_y then min_y = top end
+                if right > max_x then max_x = right end
+                if bottom > max_y then max_y = bottom end
+            end
+        end
+    end
+
+    if min_x == math.huge then return nil end
+    return {
+        left_top = { x = min_x, y = min_y },
+        right_bottom = { x = max_x, y = max_y },
+    }
+end
+
+local function position_key(name, position)
+    local x = math.floor(position.x * 256 + 0.5)
+    local y = math.floor(position.y * 256 + 0.5)
+    return name .. "@" .. x .. "," .. y
+end
+
+-- 用 Factorio 实际生成的 ghost 位置反推最终内容锚点。选择出现次数最少的
+-- 实体类型产生候选平移，再用全部 ghost 打分，避免依赖 build_blueprint 返回顺序。
+local function infer_runtime_anchor(blueprint_entities, ghosts, direction, fallback)
+    local relative_by_name = {}
+    for _, entity in pairs(blueprint_entities or {}) do
+        local positions = relative_by_name[entity.name]
+        if not positions then
+            positions = {}
+            relative_by_name[entity.name] = positions
+        end
+        positions[#positions + 1] = rotate_vector(entity.position, direction)
+    end
+
+    local actual_by_name = {}
+    local actual_lookup = {}
+    for _, ghost in pairs(ghosts or {}) do
+        if ghost.valid and ghost.ghost_name and ghost.position then
+            local positions = actual_by_name[ghost.ghost_name]
+            if not positions then
+                positions = {}
+                actual_by_name[ghost.ghost_name] = positions
+            end
+            positions[#positions + 1] = ghost.position
+            actual_lookup[position_key(ghost.ghost_name, ghost.position)] = true
+        end
+    end
+
+    local candidate_name
+    local candidate_cost = math.huge
+    for name, relative_positions in pairs(relative_by_name) do
+        local actual_positions = actual_by_name[name]
+        if actual_positions then
+            local cost = #relative_positions * #actual_positions
+            if cost < candidate_cost then
+                candidate_name = name
+                candidate_cost = cost
+            end
+        end
+    end
+    if not candidate_name then return fallback end
+
+    local best_anchor
+    local best_score = -1
+    local best_distance = math.huge
+    for _, relative_position in ipairs(relative_by_name[candidate_name]) do
+        for _, actual_position in ipairs(actual_by_name[candidate_name]) do
+            local candidate = {
+                x = actual_position.x - relative_position.x,
+                y = actual_position.y - relative_position.y,
+            }
+            local score = 0
+            for _, entity in pairs(blueprint_entities or {}) do
+                local rotated = rotate_vector(entity.position, direction)
+                local expected = {
+                    x = rotated.x + candidate.x,
+                    y = rotated.y + candidate.y,
+                }
+                if actual_lookup[position_key(entity.name, expected)] then
+                    score = score + 1
+                end
+            end
+
+            local dx = candidate.x - fallback.x
+            local dy = candidate.y - fallback.y
+            local distance = dx * dx + dy * dy
+            if score > best_score or (score == best_score and distance < best_distance) then
+                best_anchor = candidate
+                best_score = score
+                best_distance = distance
+            end
+        end
+    end
+
+    return best_anchor or fallback
+end
+
+local function build_blueprint_ghosts(stack, surface, anchor, direction)
+    return stack.build_blueprint {
+        surface         = surface,
+        force           = game.forces.player,
+        position        = { anchor.x, anchor.y },
+        direction       = direction,
+        build_mode      = defines.build_mode.forced,
+        skip_fog_of_war = false,
+    } or {}
+end
+
+-- 第一次 build 只用于读取 Factorio 最终采用的实体位置。资源必须在正式 ghost
+-- 生成前铺好，否则在 ghost 占地内创建矿物可能让矿机 ghost 失效。
+local function destroy_probe_ghosts(ghosts)
+    local destroyed = 0
+    for _, ghost in pairs(ghosts or {}) do
+        if ghost.valid and ghost.type == "entity-ghost" then
+            ghost.destroy()
+            destroyed = destroyed + 1
+        end
+    end
+    return destroyed
+end
+
+-- 资源区域常量运算器只用于声明矿机选择矩形，不属于最终基地。
+-- 按最终内容锚点记录名称和位置，避免误删蓝图里的普通常量运算器。
+local function collect_resource_marker_positions(blueprint_entities, anchor, direction)
+    local positions = {}
+    local count = 0
+    for _, entity in pairs(blueprint_entities or {}) do
+        if resources.is_resource_zone_marker(entity) then
+            local position = transform_pos(entity.position, anchor, direction)
+            local key = position_key(entity.name, position)
+            positions[key] = (positions[key] or 0) + 1
+            count = count + 1
+        end
+    end
+    return positions, count
+end
+
+local function destroy_resource_marker_ghosts(ghosts, marker_positions)
+    local destroyed = 0
+    for index, ghost in pairs(ghosts or {}) do
+        if ghost.valid and ghost.type == "entity-ghost" and ghost.ghost_name then
+            local key = position_key(ghost.ghost_name, ghost.position)
+            local remaining = marker_positions[key] or 0
+            if remaining > 0 then
+                ghost.destroy()
+                ghosts[index] = nil
+                marker_positions[key] = remaining - 1
+                destroyed = destroyed + 1
+            end
+        end
+    end
+    return destroyed
 end
 
 --------------------------------------------------------------------------------
@@ -260,18 +450,49 @@ local function apply(surface, cfg, blueprint_string, anchor, direction)
             error("stack is not a valid blueprint after import")
         end
 
+        local content_anchor = resolve_blueprint_content_anchor(stack, anchor, direction)
         local blueprint_entities = stack.get_blueprint_entities()
         local blueprint_tiles = stack.get_blueprint_tiles()
 
-        -- 先算蓝图在 surface 上的 AABB，清掉范围内的树 / 简单实体 / 悬崖
+        -- 先算蓝图在 surface 上的 AABB，清掉范围内的非玩家、非资源障碍
         local aabb = compute_aabb(
             blueprint_entities,
             blueprint_tiles,
-            anchor, direction
+            content_anchor, direction
         )
         if aabb then
             clean.clean_blueprint_area(surface, aabb)
         end
+
+        -- 先试放一次取得 Factorio 实际采用的坐标。forced 模式会直接铺 tile，
+        -- 但 tile 再铺一次是幂等的；实体 ghost 会在资源生成前删除并正式重建。
+        local probe_ghosts = build_blueprint_ghosts(
+            stack, surface, content_anchor, direction
+        )
+
+        local runtime_aabb = compute_runtime_aabb(probe_ghosts)
+        if runtime_aabb then
+            clean.clean_blueprint_area(surface, runtime_aabb)
+        end
+
+        local runtime_anchor = infer_runtime_anchor(
+            blueprint_entities,
+            probe_ghosts,
+            direction,
+            content_anchor
+        )
+        if runtime_anchor.x ~= content_anchor.x or runtime_anchor.y ~= content_anchor.y then
+            log(("[BestLanding] apply_blueprint: adjusted resource anchor on %s from %.1f,%.1f to %.1f,%.1f")
+                :format(
+                    surface.name,
+                    content_anchor.x,
+                    content_anchor.y,
+                    runtime_anchor.x,
+                    runtime_anchor.y
+                ))
+        end
+
+        destroy_probe_ghosts(probe_ghosts)
 
         resources.place_blueprint_resources(
             surface,
@@ -280,28 +501,40 @@ local function apply(surface, cfg, blueprint_string, anchor, direction)
             function(entity)
                 local entity_direction = entity.direction or 0
                 return {
-                    position = transform_pos(entity.position, anchor, direction),
+                    position = transform_pos(entity.position, runtime_anchor, direction),
                     direction = (entity_direction + direction) % 16,
                 }
             end
         )
 
-        -- 直接 build_blueprint：forced 模式下 tile 直接铺（不走 tile ghost），
-        -- 实体生成为 ghost 等我们手动 revive。不再手动 set_tiles——旧代码那段
-        -- 既冗余又带着一个 blueprint-relative 坐标没变换的 bug。
-        local ghosts = stack.build_blueprint {
-            surface         = surface,
-            force           = game.forces.player,
-            position        = { anchor.x, anchor.y },
-            direction       = direction,
-            build_mode      = defines.build_mode.forced,
-            skip_fog_of_war = false,
-        } or {}
+        -- 矿物已经存在后，再正式创建实体 ghost。这样矿机可以正常生成在矿物上，
+        -- 同时保留蓝图中的配方、模块、过滤器、品质和连线等全部设置。
+        local ghosts = build_blueprint_ghosts(
+            stack, surface, content_anchor, direction
+        )
+
+        local marker_positions, expected_markers = collect_resource_marker_positions(
+            blueprint_entities, runtime_anchor, direction
+        )
+        local destroyed_markers = destroy_resource_marker_ghosts(
+            ghosts, marker_positions
+        )
+        if destroyed_markers ~= expected_markers then
+            log(("[BestLanding] apply_blueprint: removed %d/%d resource-zone marker ghosts on %s")
+                :format(destroyed_markers, expected_markers, surface.name))
+        end
+
+        local final_runtime_aabb = compute_runtime_aabb(ghosts)
+        if final_runtime_aabb then
+            clean.clean_blueprint_area(surface, final_runtime_aabb)
+        end
 
         -- revive 参数：
         --   raise_revive = false              省掉 script_raised_revive 事件广播
         --   return_item_request_proxy = true  确保第三个返回值给到 item_request_proxy
         --                                     （quantum-fabrication 等 2.0 working Mod 都这么传）
+        local invalid_ghosts = 0
+        local failed_revives = 0
         for _, ghost in pairs(ghosts) do
             if ghost.valid then
                 local _, revived_entity, proxy = ghost.revive {
@@ -312,8 +545,16 @@ local function apply(surface, cfg, blueprint_string, anchor, direction)
                     fulfill_item_requests(revived_entity, proxy)
                     initialize_blueprint_entity(revived_entity)
                     lock_cheat_entity(revived_entity)
+                else
+                    failed_revives = failed_revives + 1
                 end
+            else
+                invalid_ghosts = invalid_ghosts + 1
             end
+        end
+        if invalid_ghosts > 0 or failed_revives > 0 then
+            log(("[BestLanding] apply_blueprint: %d invalid ghosts and %d failed revives on %s")
+                :format(invalid_ghosts, failed_revives, surface.name))
         end
     end)
 

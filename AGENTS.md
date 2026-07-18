@@ -38,9 +38,9 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
   - `script.on_event(on_surface_created, ...)` 对其他行星触发，用 `surface.planet ~= nil` 排除太空平台。
   - pipeline 顺序：`clean_area.run` → `apply_blueprint.run`；每层蓝图在实体建造前调用 `place_resources.place_blueprint_resources`。
   - 没有资源生成模式设置和固定 fallback。固体矿、地块资源、流体源全部由当前选中的蓝图层里的 mining drill / offshore pump / pumpjack 推断；关闭起始蓝图时也不生成起始资源。
-  - 五颗行星各有一个 `BestLanding-<planet>-base-level` runtime-global 设置：`basic=1`、`powered=2`、`production=3`。选中等级会从一级开始累计应用所有不高于该等级的蓝图层。
+  - 五颗行星各有一个 `BestLanding-<planet>-base-level` runtime-global 设置：`basic=1`、`powered=2`、`mining=3`、`production=4`。选中等级会从一级开始累计应用所有不高于该等级的蓝图层。
 
-- **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`。
+- **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`BLUEPRINT_CLEAR_MARGIN=16`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`。
 
 - **`planets.lua`** — 五颗行星的 single source of truth。每颗一个 `{ default_tile, enemy_cleanup, blueprint_tile_resources?, blueprint_fluid_sources? }`。两个 `blueprint_*` 配置分别定义蓝图里的 offshore pump / pumpjack 列从左到右对应的资源顺序，默认每 2 列实体一组。固体矿类型不再配置在这里。
 
@@ -48,19 +48,23 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 - **`clean_area.lua`** — `run(surface, cfg)` + `clean_blueprint_area(surface, area)`。
   - `run` 流程：`force_generate` 清理区 → `find_entities` 一次扫光非玩家实体（不再第二次 filter 资源 / 悬崖，`find_entities` 已经包含）→ `cleanup_enemies` 按 `cfg.enemy_cleanup.filters` 清扩围 → `set_tiles` 全刷 `cfg.default_tile`。
-  - `clean_blueprint_area` 给 `apply_blueprint` 用，清掉完整蓝图占地内所有非玩家、非资源实体，不动已有玩家建筑和矿物。
+  - `clean_blueprint_area` 给 `apply_blueprint` 用，清掉完整蓝图占地及外围 16 格视觉缓冲内所有非玩家、非资源实体，不动已有玩家建筑和矿物。
 
-- **`place_resources.lua`** — 只保留 `place_blueprint_resources(surface, cfg, entities, transform)`。它在每层蓝图 build 前扫描资源区域标记、mining drill、offshore pump 和 pumpjack。两个带固定说明 `BestLanding:resource-zone` 的常量运算器组成一个矿机选择矩形；两者必须只有一个相同的普通品质固体资源信号，并用相同的正整数信号数量作为区域编号。矩形只选择中心位于其中的固体矿机，实际铺矿范围仍由每台矿机自己的采矿半径决定。offshore pump / pumpjack 仍按 x 坐标列组对应行星配置，并分别在 source tile 边界 `set_tiles`、在中心 `create_entity` 流体源。
+- **`place_resources.lua`** — 只保留 `place_blueprint_resources(surface, cfg, entities, transform)`。它在每层蓝图 build 前扫描资源区域标记、mining drill、offshore pump 和 pumpjack。两个带固定说明 `BestLanding:resource-zone` 的常量运算器组成一个矿机选择矩形；两者必须只有一个相同的普通品质固体资源信号，并用相同的正整数信号数量作为区域编号。矩形只选择中心位于其中的固体矿机，实际铺矿范围仍由每台矿机自己的采矿半径决定。同矿种重叠直接去重；一台矿机被不同矿种区域选中时整台跳过并记录日志；不同矿机的不同矿种采矿范围重叠时保留先分配矿种并汇总记录冲突格数。offshore pump / pumpjack 仍按 x 坐标列组对应行星配置，并分别在 source tile 边界 `set_tiles`、在中心 `create_entity` 流体源。`is_resource_zone_marker` 同时供放置阶段复用，确保识别规则只有一份。
 
 - **`apply_blueprint.lua`** — `run(surface, cfg)`。遍历 `blueprints` 表匹配 `surface.name`（小写比较）。单个蓝图流程：
   1. 临时 `game.create_inventory(1)` + `stack.import_stack(...)` + 校验 `valid_for_read and is_blueprint`。
-  2. `compute_aabb` — **把蓝图实体的完整碰撞箱和 tile 占地按 anchor + direction 变换到 surface 坐标**再算 AABB。不能只取实体中心，否则边缘大型建筑仍可能被清理范围外的障碍挡住。
-  3. `clean.clean_blueprint_area(surface, aabb)` 清掉范围内所有非玩家、非资源障碍实体。
-  4. `place_resources.place_blueprint_resources(...)` 根据蓝图里的常量运算器资源区域标记、矿机、offshore pump 和 pumpjack，先铺对应固体矿、地块资源和流体源。
-  5. `stack.build_blueprint{ build_mode = defines.build_mode.forced }`。forced 模式下 tile 直接落地，**不再手动 `set_tiles`**（旧代码那段是冗余且坐标没变换）。
-  6. 对每个 ghost 调 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`。
-  7. 每个 revive 出来的实体都会把 `electric_buffer_size` 对应的电能缓冲充满；`roboport` 还会在机器人 / 材料库存中分别追加一组普通品质的建筑机器人、物流机器人和修理包。
-  8. 如果 revive 出来的实体是 `infinity-container` / `infinity-pipe` / `infinity-cargo-wagon`，立刻设 `minable_flag=false`、`destructible=false`、`operable=false`、`rotatable=false`。这类蓝图里的作弊供给实体只作为只读补给源存在：玩家不能打开设置界面、旋转、拆除或破坏它们，但 inserter / 管网仍然可以从里面取物品或抽流体。
+  2. `resolve_blueprint_content_anchor` — 只读取绝对网格吸附蓝图的 `blueprint_position_relative_to_grid`，为清理、资源推断和实际建造换算统一的内容锚点，不修改任何蓝图吸附设置。脚本版 `build_blueprint` 使用显式位置，不会执行玩家光标的网格吸附。
+  3. `compute_aabb` — **把蓝图实体的完整碰撞箱和 tile 占地按最终 anchor + direction 变换到 surface 坐标**再算 AABB。不能只取实体中心，否则边缘大型建筑仍可能被清理范围外的障碍挡住。
+  4. `clean.clean_blueprint_area(surface, aabb)` 清掉范围内所有非玩家、非资源障碍实体。
+  5. 第一次 `stack.build_blueprint{ build_mode = defines.build_mode.forced }` 只作为试放；根据 ghost 的真实 `bounding_box` 再清理一次实际建造范围，并用 `infer_runtime_anchor` 反推 Factorio 最终采用的内容锚点。
+  6. 删除试放产生的实体 ghost；forced 模式已经直接落下的 tile 保留，因为第二次铺相同 tile 是幂等的。
+  7. `place_resources.place_blueprint_resources(...)` 使用真实内容锚点，根据资源区域标记、矿机、offshore pump 和 pumpjack 铺对应固体矿、地块资源和流体源。
+  8. 用完全相同的蓝图和放置参数第二次 `build_blueprint`，在资源已经存在的情况下正式生成实体 ghost，避免创建矿物导致矿机 ghost 失效。
+  9. 按说明和最终实际坐标删除 `BestLanding:resource-zone` 常量运算器 ghost；它们只作为设计标记，不属于最终基地，普通常量运算器不受影响。
+  10. 根据其余正式 ghost 的真实占地再清理一次障碍，然后逐个调用 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`；无效 ghost 和复活失败会汇总写日志。
+  11. 每个 revive 出来的实体都会把 `electric_buffer_size` 对应的电能缓冲充满；`roboport` 还会在机器人 / 材料库存中分别追加一组普通品质的建筑机器人、物流机器人和修理包。
+  12. 如果 revive 出来的实体是 `infinity-container` / `infinity-pipe` / `infinity-cargo-wagon`，立刻设 `minable_flag=false`、`destructible=false`、`operable=false`、`rotatable=false`。这类蓝图里的作弊供给实体只作为只读补给源存在：玩家不能打开设置界面、旋转、拆除或破坏它们，但 inserter / 管网仍然可以从里面取物品或抽流体。
   - `fulfill_item_requests` — **用 `proxy.insert_plan`，不是 `proxy.item_requests`**。LuaEntity 上这两个字段格式完全不同：
     - `LuaEntity::item_requests :: ItemWithQualityCounts`（只读）—— 扁平 `[{name, quality, count}, ...]`，没有 slot 信息
     - `LuaEntity::insert_plan :: array[BlueprintInsertPlan]`（读写）—— per-slot `[{id={name, quality}, items={in_inventory=[{inventory, stack, count}, ...], grid_count?}}, ...]`
@@ -72,7 +76,7 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
     参考实现：<https://github.com/refulgence/quantum-fabrication/blob/main/scripts/builder.lua>
   - 整段用 `pcall` 包起来，即便中途抛错也保证 `inventory.destroy()` 跑到。
 
-- **`blueprints.lua`** — 五颗行星各有三个蓝图层：原有的行星同名变量是基础基地，`*Power` 是二级追加的供电系统，`*Production` 是三级追加的生产设施。表项格式为 `{ level, data, pos, direction }`；二、三级字符串默认留空，空层会被直接跳过。
+- **`blueprints.lua`** — 五颗行星各有四个蓝图层：原有的行星同名变量是基础基地，`*Power` 是二级追加的供电系统，`*Mining` 是三级追加的矿物设施，`*Production` 是四级追加的生产设施。表项格式为 `{ level, data, pos, direction }`；新增矿物层字符串默认留空，空层会被直接跳过。
 
 ### 星球配置 → 资源 → 蓝图 的契约
 
