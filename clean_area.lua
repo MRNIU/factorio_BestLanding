@@ -96,19 +96,26 @@ function M.run(surface, cfg)
     log(("[BestLanding] clean_area: done on %s"):format(surface.name))
 end
 
--- 供 apply_blueprint 调用：只清树 / 简单实体 / 悬崖，不碰资源、不换 tile
+-- 供 apply_blueprint 调用：清掉完整蓝图占地内的非玩家障碍，不碰资源、不换 tile。
+-- 不能只枚举 tree / simple-entity / cliff；Space Age 和其他 Mod 可能使用别的
+-- 中立实体类型表示岩石或遗迹。后续蓝图层已建好的玩家实体必须保留。
 function M.clean_blueprint_area(surface, area)
     if not (surface and surface.valid and area) then return end
 
     local padded = expand_area(area, 5)
     chunks.force_generate(surface, padded)
 
-    local obstacles = surface.find_entities_filtered {
-        area = to_api_area(padded),
-        type = { "tree", "simple-entity", "cliff" },
-    }
+    local player_force = game.forces.player
+    local obstacles = surface.find_entities(to_api_area(padded))
     for _, e in pairs(obstacles) do
-        if e.valid then e.destroy() end
+        local force = e.valid and e.force
+        if e.valid
+            and e.type ~= "character"
+            and e.type ~= "resource"
+            and (not force or force.index ~= player_force.index)
+        then
+            e.destroy()
+        end
     end
 end
 

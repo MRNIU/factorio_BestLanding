@@ -26,35 +26,94 @@ local ROBOPORT_SUPPLIES = {
 --------------------------------------------------------------------------------
 -- 蓝图本地坐标 → surface 坐标：先按 MapDirection 旋转，再平移 anchor
 
-local function transform_pos(pos, anchor, direction)
-    local x, y = pos.x, pos.y
-    -- MapDirection：0=N, 4=E, 8=S, 12=W（每 4 单位 = 90°）
+local function rotate_vector(vector, direction)
+    local x, y = vector.x or vector[1], vector.y or vector[2]
     direction = (direction or 0) % 16
-    if direction == 4 then
-        x, y = -y, x
+
+    -- 常用的四个正交方向保持精确值；其他方向主要用于斜向铁轨碰撞箱。
+    if direction == 0 then
+        return { x = x, y = y }
+    elseif direction == 4 then
+        return { x = -y, y = x }
     elseif direction == 8 then
-        x, y = -x, -y
+        return { x = -x, y = -y }
     elseif direction == 12 then
-        x, y = y, -x
+        return { x = y, y = -x }
     end
-    return { x = x + anchor.x, y = y + anchor.y }
+
+    local angle = direction * math.pi / 8
+    local cos_angle = math.cos(angle)
+    local sin_angle = math.sin(angle)
+    return {
+        x = x * cos_angle - y * sin_angle,
+        y = x * sin_angle + y * cos_angle,
+    }
 end
 
--- 从蓝图 entities + tiles 的本地坐标，换算出 surface 上的 AABB
+local function transform_pos(pos, anchor, direction)
+    local rotated = rotate_vector(pos, direction)
+    return { x = rotated.x + anchor.x, y = rotated.y + anchor.y }
+end
+
+-- 从蓝图 entities + tiles 的完整占地，换算出 surface 上的 AABB。
+-- 实体不能只看中心点，否则边缘大型建筑的碰撞箱会落到清理区之外。
 local function compute_aabb(entities, tiles, anchor, direction)
     local min_x, min_y =  math.huge,  math.huge
     local max_x, max_y = -math.huge, -math.huge
 
-    local function extend(pos)
-        local p = transform_pos(pos, anchor, direction)
+    local function extend_surface_position(p)
         if p.x < min_x then min_x = p.x end
         if p.x > max_x then max_x = p.x end
         if p.y < min_y then min_y = p.y end
         if p.y > max_y then max_y = p.y end
     end
 
-    if entities then for _, e in pairs(entities) do extend(e.position) end end
-    if tiles    then for _, t in pairs(tiles)    do extend(t.position) end end
+    local function extend_local_position(pos)
+        extend_surface_position(transform_pos(pos, anchor, direction))
+    end
+
+    for _, entity in pairs(entities or {}) do
+        local proto = prototypes.entity[entity.name]
+        local box = proto and proto.collision_box
+        local left_top = box and (box.left_top or box[1])
+        local right_bottom = box and (box.right_bottom or box[2])
+
+        if left_top and right_bottom then
+            local left = left_top.x or left_top[1]
+            local top = left_top.y or left_top[2]
+            local right = right_bottom.x or right_bottom[1]
+            local bottom = right_bottom.y or right_bottom[2]
+
+            -- 对碰撞箱做中心对称扩展，可安全覆盖镜像实体和非对称原型。
+            local half_width = math.max(math.abs(left), math.abs(right))
+            local half_height = math.max(math.abs(top), math.abs(bottom))
+            local entity_direction = ((entity.direction or 0) + (direction or 0)) % 16
+            local center = transform_pos(entity.position, anchor, direction)
+
+            for _, corner in ipairs {
+                { x = -half_width, y = -half_height },
+                { x =  half_width, y = -half_height },
+                { x = -half_width, y =  half_height },
+                { x =  half_width, y =  half_height },
+            } do
+                local rotated = rotate_vector(corner, entity_direction)
+                extend_surface_position {
+                    x = center.x + rotated.x,
+                    y = center.y + rotated.y,
+                }
+            end
+        else
+            extend_local_position(entity.position)
+        end
+    end
+
+    for _, tile in pairs(tiles or {}) do
+        local x, y = tile.position.x, tile.position.y
+        extend_local_position { x = x,     y = y }
+        extend_local_position { x = x + 1, y = y }
+        extend_local_position { x = x,     y = y + 1 }
+        extend_local_position { x = x + 1, y = y + 1 }
+    end
 
     if min_x == math.huge then return nil end
     return {

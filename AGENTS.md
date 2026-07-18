@@ -42,21 +42,21 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 - **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`。
 
-- **`planets.lua`** — 五颗行星的 single source of truth。每颗一个 `{ default_tile, enemy_cleanup, blueprint_mining?, blueprint_tile_resources?, blueprint_fluid_sources? }`。三个 `blueprint_*` 配置分别定义蓝图里的矿机 / offshore pump / pumpjack 列从左到右对应的资源顺序，默认每 2 列实体一组。
+- **`planets.lua`** — 五颗行星的 single source of truth。每颗一个 `{ default_tile, enemy_cleanup, blueprint_tile_resources?, blueprint_fluid_sources? }`。两个 `blueprint_*` 配置分别定义蓝图里的 offshore pump / pumpjack 列从左到右对应的资源顺序，默认每 2 列实体一组。固体矿类型不再配置在这里。
 
 - **`chunks.lua`** — `force_generate` / `force_generate_ring`。批量 `request_to_generate_chunks` + 单次 `force_generate_chunk_requests` 是官方推荐姿势。ring 变体用于 Vulcanus Demolisher 扫描扩围：清理区已经由 `force_generate` 生成过，只补外环 chunk 就够了。
 
 - **`clean_area.lua`** — `run(surface, cfg)` + `clean_blueprint_area(surface, area)`。
   - `run` 流程：`force_generate` 清理区 → `find_entities` 一次扫光非玩家实体（不再第二次 filter 资源 / 悬崖，`find_entities` 已经包含）→ `cleanup_enemies` 按 `cfg.enemy_cleanup.filters` 清扩围 → `set_tiles` 全刷 `cfg.default_tile`。
-  - `clean_blueprint_area` 给 `apply_blueprint` 用，只清树 / 简单实体 / 悬崖，不动矿。
+  - `clean_blueprint_area` 给 `apply_blueprint` 用，清掉完整蓝图占地内所有非玩家、非资源实体，不动已有玩家建筑和矿物。
 
-- **`place_resources.lua`** — 只保留 `place_blueprint_resources(surface, cfg, entities, transform)`。它在每层蓝图 build 前扫描 mining drill / offshore pump / pumpjack，按 x 坐标归并成列，从左到右每 `columns_per_resource` 列对应配置里的一个资源，并分别在矿机采矿半径内 `create_entity` 固体矿、在 offshore pump 的 source tile 边界 `set_tiles`、在 pumpjack 中心 `create_entity` 流体源。
+- **`place_resources.lua`** — 只保留 `place_blueprint_resources(surface, cfg, entities, transform)`。它在每层蓝图 build 前扫描资源区域标记、mining drill、offshore pump 和 pumpjack。两个带固定说明 `BestLanding:resource-zone` 的常量运算器组成一个矿机选择矩形；两者必须只有一个相同的普通品质固体资源信号，并用相同的正整数信号数量作为区域编号。矩形只选择中心位于其中的固体矿机，实际铺矿范围仍由每台矿机自己的采矿半径决定。offshore pump / pumpjack 仍按 x 坐标列组对应行星配置，并分别在 source tile 边界 `set_tiles`、在中心 `create_entity` 流体源。
 
 - **`apply_blueprint.lua`** — `run(surface, cfg)`。遍历 `blueprints` 表匹配 `surface.name`（小写比较）。单个蓝图流程：
   1. 临时 `game.create_inventory(1)` + `stack.import_stack(...)` + 校验 `valid_for_read and is_blueprint`。
-  2. `compute_aabb` — **把蓝图本地坐标按 anchor + direction 变换到 surface 坐标**再算 AABB。这是修过的 bug：旧代码直接拿 blueprint-relative 坐标当 surface 坐标用，只因所有蓝图 `pos={0,0} direction=0` 巧合工作。
-  3. `clean.clean_blueprint_area(surface, aabb)` 清树 / 简单实体 / 悬崖。
-  4. `place_resources.place_blueprint_resources(...)` 根据蓝图里的矿机 / offshore pump / pumpjack 列，先铺对应固体矿、地块资源和流体源。
+  2. `compute_aabb` — **把蓝图实体的完整碰撞箱和 tile 占地按 anchor + direction 变换到 surface 坐标**再算 AABB。不能只取实体中心，否则边缘大型建筑仍可能被清理范围外的障碍挡住。
+  3. `clean.clean_blueprint_area(surface, aabb)` 清掉范围内所有非玩家、非资源障碍实体。
+  4. `place_resources.place_blueprint_resources(...)` 根据蓝图里的常量运算器资源区域标记、矿机、offshore pump 和 pumpjack，先铺对应固体矿、地块资源和流体源。
   5. `stack.build_blueprint{ build_mode = defines.build_mode.forced }`。forced 模式下 tile 直接落地，**不再手动 `set_tiles`**（旧代码那段是冗余且坐标没变换）。
   6. 对每个 ghost 调 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`。
   7. 每个 revive 出来的实体都会把 `electric_buffer_size` 对应的电能缓冲充满；`roboport` 还会在机器人 / 材料库存中分别追加一组普通品质的建筑机器人、物流机器人和修理包。
@@ -76,9 +76,10 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 ### 星球配置 → 资源 → 蓝图 的契约
 
-`planets.lua` 里的资源列表只定义类型映射；固体矿 / 地块资源 / 流体源位置分别完全由当前选中蓝图层里的 mining drill / offshore pump / pumpjack 列决定。所以：
+固体矿类型和矿机选择矩形完全由当前蓝图层里的资源区域常量运算器决定；实际矿区由被选中 mining drill 的采矿范围决定。地块资源 / 流体源位置仍由当前选中蓝图层里的 offshore pump / pumpjack 列决定。所以：
 
-- 改 `blueprint_*_resources.resources` 顺序 = 从左到右的实体列组对应资源会变。
+- 改常量运算器的资源信号 = 对应矩形内矿机生成的固体矿类型会变。
+- 改 `blueprint_tile_resources.resources` / `blueprint_fluid_sources.resources` 顺序 = 从左到右的泵类实体列组对应资源会变。
 - 改 `ORE_PER_TILE` / `FLUID_AMOUNT` = 安全（只是数值，蓝图不依赖）。
 
 ### 状态模型（Factorio 2.1）

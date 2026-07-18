@@ -6,6 +6,7 @@ local C = require("constants")
 local M = {}
 
 local PUMPJACK_NAME = "pumpjack"
+local RESOURCE_ZONE_DESCRIPTION = "BestLanding:resource-zone"
 local DEFAULT_COLUMNS_PER_RESOURCE = 2
 
 local function place_tile_area(surface, tile_name, area, placed)
@@ -93,6 +94,56 @@ local function is_solid_resource_drill(entity)
     return get_drill_radius(entity) ~= nil
 end
 
+local function is_resource_zone_marker(entity)
+    local proto = prototypes.entity[entity.name]
+    return proto
+        and proto.type == "constant-combinator"
+        and entity.player_description == RESOURCE_ZONE_DESCRIPTION
+end
+
+local function resource_marker_signal(entity)
+    local sections = entity.control_behavior
+        and entity.control_behavior.sections
+        and entity.control_behavior.sections.sections
+    if not sections then
+        return nil, nil, "missing constant-combinator sections"
+    end
+
+    local signal
+    for _, section in pairs(sections) do
+        for _, filter in pairs(section.filters or {}) do
+            if filter.name then
+                if signal then
+                    return nil, nil, "more than one signal is configured"
+                end
+                signal = filter
+            end
+        end
+    end
+
+    if not signal then
+        return nil, nil, "no signal is configured"
+    end
+    if signal.type and signal.type ~= "item" then
+        return nil, nil, "the signal is not an item signal"
+    end
+    if signal.quality and signal.quality ~= "normal" then
+        return nil, nil, "the signal quality is not normal"
+    end
+
+    local resource = prototypes.entity[signal.name]
+    if not (resource and resource.type == "resource") then
+        return nil, nil, ("%s is not a resource entity prototype"):format(signal.name)
+    end
+
+    local zone_id = signal.count or 1
+    if type(zone_id) ~= "number" or zone_id < 1 or zone_id % 1 ~= 0 then
+        return nil, nil, "the signal count is not a positive integer zone id"
+    end
+
+    return signal.name, zone_id
+end
+
 local function is_fluid_resource_drill(entity)
     return entity.name == PUMPJACK_NAME
 end
@@ -113,6 +164,136 @@ local function mining_area(position, radius)
             y = math.ceil(position.y + radius),
         },
     }
+end
+
+local function position_in_zone(position, zone)
+    return position.x >= zone.left
+        and position.x <= zone.right
+        and position.y >= zone.top
+        and position.y <= zone.bottom
+end
+
+local function collect_resource_zones(surface, entities, transform)
+    local marker_groups = {}
+
+    for _, entity in pairs(entities or {}) do
+        if is_resource_zone_marker(entity) then
+            local resource_name, zone_id, reason = resource_marker_signal(entity)
+            if resource_name then
+                local resource_groups = marker_groups[resource_name]
+                if not resource_groups then
+                    resource_groups = {}
+                    marker_groups[resource_name] = resource_groups
+                end
+
+                local markers = resource_groups[zone_id]
+                if not markers then
+                    markers = {}
+                    resource_groups[zone_id] = markers
+                end
+                markers[#markers + 1] = transform(entity).position
+            else
+                log(("[BestLanding] resource-zone marker %s on %s is invalid: %s; skipping")
+                    :format(tostring(entity.entity_number), surface.name, reason))
+            end
+        end
+    end
+
+    local zones = {}
+    for resource_name, resource_groups in pairs(marker_groups) do
+        for zone_id, markers in pairs(resource_groups) do
+            if #markers == 2 then
+                zones[#zones + 1] = {
+                    resource_name = resource_name,
+                    zone_id = zone_id,
+                    left = math.min(markers[1].x, markers[2].x),
+                    right = math.max(markers[1].x, markers[2].x),
+                    top = math.min(markers[1].y, markers[2].y),
+                    bottom = math.max(markers[1].y, markers[2].y),
+                }
+            else
+                log(("[BestLanding] resource-zone %s x %d on %s has %d markers instead of 2; skipping")
+                    :format(resource_name, zone_id, surface.name, #markers))
+            end
+        end
+    end
+
+    table.sort(zones, function(a, b)
+        if a.resource_name ~= b.resource_name then
+            return a.resource_name < b.resource_name
+        end
+        return a.zone_id < b.zone_id
+    end)
+    return zones
+end
+
+local function collect_solid_drills(entities, transform)
+    local drills = {}
+    for _, entity in pairs(entities or {}) do
+        if is_solid_resource_drill(entity) then
+            local transformed = transform(entity)
+            drills[#drills + 1] = {
+                entity_number = entity.entity_number,
+                name = entity.name,
+                position = transformed.position,
+                radius = get_drill_radius(entity),
+            }
+        end
+    end
+
+    table.sort(drills, function(a, b)
+        if a.position.x ~= b.position.x then return a.position.x < b.position.x end
+        if a.position.y ~= b.position.y then return a.position.y < b.position.y end
+        return (a.entity_number or 0) < (b.entity_number or 0)
+    end)
+    return drills
+end
+
+local function place_marked_ore_resources(surface, entities, transform)
+    local zones = collect_resource_zones(surface, entities, transform)
+    if #zones == 0 then
+        log(("[BestLanding] blueprint_mining: no valid resource zones found on %s")
+            :format(surface.name))
+        return
+    end
+
+    local placed = {}
+    local assigned = 0
+    for _, drill in ipairs(collect_solid_drills(entities, transform)) do
+        local resource_name
+        local conflicting_resource
+
+        for _, zone in ipairs(zones) do
+            if position_in_zone(drill.position, zone) then
+                if resource_name and resource_name ~= zone.resource_name then
+                    conflicting_resource = zone.resource_name
+                    break
+                end
+                resource_name = zone.resource_name
+            end
+        end
+
+        if conflicting_resource then
+            log(("[BestLanding] blueprint mining drill %s on %s belongs to conflicting %s and %s zones; skipping")
+                :format(
+                    tostring(drill.entity_number),
+                    surface.name,
+                    resource_name,
+                    conflicting_resource
+                ))
+        elseif resource_name then
+            place_ore_tiles(
+                surface,
+                resource_name,
+                mining_area(drill.position, drill.radius),
+                placed
+            )
+            assigned = assigned + 1
+        end
+    end
+
+    log(("[BestLanding] blueprint_mining: seeded %d drills from %d resource zones on %s")
+        :format(assigned, #zones, surface.name))
 end
 
 local function cardinal_direction(direction)
@@ -281,21 +462,7 @@ end
 function M.place_blueprint_resources(surface, cfg, entities, transform)
     if not (surface and surface.valid and cfg) then return end
 
-    place_column_resources(
-        surface,
-        "blueprint_mining",
-        cfg.blueprint_mining,
-        collect_columns(entities, transform, is_solid_resource_drill, function(entity, transformed)
-            return {
-                name = entity.name,
-                position = transformed.position,
-                radius = get_drill_radius(entity),
-            }
-        end),
-        function(s, resource_name, drill, placed)
-            place_ore_tiles(s, resource_name, mining_area(drill.position, drill.radius), placed)
-        end
-    )
+    place_marked_ore_resources(surface, entities, transform)
 
     place_column_resources(
         surface,

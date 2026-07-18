@@ -1,9 +1,9 @@
 -- Copyright The MRNIU/factorio_BestLanding Contributors
--- 五颗行星的 single source of truth：默认地形、敌人清理策略和蓝图资源列映射。
+-- 五颗行星的 single source of truth：默认地形、敌人清理策略和泵类蓝图资源列映射。
 
 local C = require("constants")
 
--- blueprint_mining 让固体矿跟随蓝图里的矿机列：从左到右每 2 列矿机一组。
+-- 固体矿由蓝图中的常量运算器资源区域标记决定。
 -- blueprint_tile_resources / blueprint_fluid_sources 分别跟随 offshore pump / pumpjack。
 
 return {
@@ -13,16 +13,6 @@ return {
             expand  = C.ENEMY_EXPAND.nauvis,
             filters = {
                 { type = { "unit-spawner", "turret" }, force = "enemy" },
-            },
-        },
-        blueprint_mining = {
-            columns_per_resource = 2,
-            resources = {
-                "iron-ore",
-                "copper-ore",
-                "stone",
-                "coal",
-                "uranium-ore",
             },
         },
         blueprint_tile_resources = {
@@ -48,14 +38,6 @@ return {
                 { type = "segmented-unit" },
             },
         },
-        blueprint_mining = {
-            columns_per_resource = 2,
-            resources = {
-                "coal",
-                "calcite",
-                "tungsten-ore",
-            },
-        },
         blueprint_tile_resources = {
             columns_per_resource = 2,
             resources = {
@@ -78,26 +60,11 @@ return {
                 { type = "unit-spawner", force = "enemy" },
             },
         },
-        blueprint_mining = {
-            columns_per_resource = 2,
-            resources = {
-                "stone",
-            },
-        },
     },
 
     fulgora = {
         default_tile = "fulgoran-dust",
         enemy_cleanup = nil, -- 无敌人
-        blueprint_mining = {
-            columns_per_resource = 2,
-            resources = {
-                "scrap",
-                "scrap",
-                "scrap",
-                "scrap",
-            },
-        },
         blueprint_tile_resources = {
             columns_per_resource = 2,
             resources = {

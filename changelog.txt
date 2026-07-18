@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.8.0
+Date: 2026-07-18
+  Changes:
+    - Replaced hard-coded solid-resource column mappings with constant-combinator resource-zone markers embedded in each blueprint layer.
+    - Resource-zone rectangles now select mining drills, while each selected drill's own mining radius determines the generated ore area.
+    - Added validation and logging for malformed marker pairs, invalid resource signals, and drills selected by conflicting resources.
+    - Fixed edge buildings being blocked by trees, rocks, or other neutral entities outside the old center-point blueprint bounds.
+
+---------------------------------------------------------------------------------------------------
 Version: 1.7.0
 Date: 2026-07-18
   Changes:
