@@ -41,16 +41,16 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
   - 没有资源生成模式设置和固定 fallback。矿物资源、地下流体源、海洋/水域地格和可放置地格都由 Mining 蓝图中的配对常量运算器标记决定；关闭起始蓝图时也不生成起始资源。
   - 五颗行星各有一个 `BestLanding-<planet>-base-level` runtime-global 设置：`basic=1`、`powered=2`、`mining=3`、`production=4`。选中等级会从一级开始累计应用所有不高于该等级的蓝图层。
 
-- **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`BLUEPRINT_CLEAR_MARGIN=16`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`。
+- **`constants.lua`** — 所有魔数的唯一出处：`CLEAR_RADIUS=224`、`BLUEPRINT_CLEAR_MARGIN=16`、`TERRITORY_CLEAR_MARGIN_CHUNKS=1`、`ORE_PER_TILE=8192`、`FLUID_AMOUNT=0xFFFFFFFF`（uint32 上限，修掉旧代码 `8192*1024*512 = 2^32` 溢出）、`ENEMY_EXPAND`。
 
 - **`planets.lua`** — 定义五颗行星的 `default_tile`，以及可选的 `enemy_cleanup` / `territory_cleanup`。这里不再包含任何资源白名单、黑名单、顺序或列映射。
 
 - **`chunks.lua`** — `force_generate` / `force_generate_ring`。批量 `request_to_generate_chunks` + 单次 `force_generate_chunk_requests` 是官方推荐姿势。ring 变体用于 Nauvis / Gleba 普通敌人扫描扩围：清理区已经由 `force_generate` 生成过，只补外环 chunk 就够了。
 
-- **`territory_cleanup.lua`** — 把严格的半开基地范围换算成 14×14 个 chunk，用 `LuaSurface::get_territory_for_chunk` 收集并销毁所有重合领地，再调用 `LuaSurface::set_territory_for_chunks(chunks, nil)` 永久移除基地 chunk 的领地归属。两步缺一不可：只调用 `LuaTerritory::destroy` 会允许地图生成器以后重新生成领地。
+- **`territory_cleanup.lua`** — 把严格的半开基地范围换算成 14×14 个 chunk，再向四周扩一圈得到 16×16 领地保护区。用 `LuaSurface::get_territory_for_chunk` 收集并销毁所有重合领地，再调用 `LuaSurface::set_territory_for_chunks(chunks, nil)` 永久移除保护区 chunk 的领地归属。两步缺一不可：只调用 `LuaTerritory::destroy` 会允许地图生成器以后重新生成领地。
 
 - **`clean_area.lua`** — `run(surface, cfg)` + `clean_blueprint_area(surface, area)`。
-  - `run` 流程：`force_generate` 清理区 → Vulcanus 按领地 chunk 与固定 448×448 范围是否重合清领地 → `find_entities` 一次扫光非玩家实体（不再第二次 filter 资源 / 悬崖，`find_entities` 已经包含）→ Nauvis / Gleba 按 `cfg.enemy_cleanup.filters` 清扩围 → `set_tiles` 全刷 `cfg.default_tile`。
+  - `run` 流程：`force_generate` 清理区 → Vulcanus 清掉 Level 1 基地及外围一圈 chunk 的重合领地 → `find_entities` 一次扫光非玩家实体（不再第二次 filter 资源 / 悬崖，`find_entities` 已经包含）→ Nauvis / Gleba 按 `cfg.enemy_cleanup.filters` 清扩围 → `set_tiles` 全刷 `cfg.default_tile`。
   - `clean_blueprint_area` 给 `apply_blueprint` 用，清掉完整蓝图占地及外围 16 格视觉缓冲内所有非玩家、非资源实体，不动已有玩家建筑和矿物。
 
 - **`resource_zones.lua`** — 纯解析器。校验和配对 `BestLanding:resource-zone` 标记，按资源原型的开采产物解析 item / fluid 信号，按 `place_as_tile_result` 解析可放置地格，并按 tile 的 `fluid` 属性和两个固定别名解析离岸泵地格。它不修改 surface，也不直接写日志。
@@ -103,7 +103,7 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 ## 常见坑
 
 - **`find_entities_*` / `set_tiles` 之前 chunk 必须先生成完**：未生成的 chunk 上前者返回空、后者无效果。`clean_area.lua` 和 `apply_blueprint` 的 `clean_blueprint_area` 都先走 `chunks.force_generate`。
-- **不能按 Demolisher 本体位置推断领地**：`LuaSegmentedUnit` 不是普通 `LuaEntity`，而且领地与当前身体位置相互独立。Vulcanus 必须先销毁与 448×448 Level 1 基地重合的领地，再用 `set_territory_for_chunks(..., nil)` 永久清掉基地 chunk 的归属；只有前一步时，之后的蓝图扩区生成会把领地重新生成回来。
+- **不能按 Demolisher 本体位置推断领地**：`LuaSegmentedUnit` 不是普通 `LuaEntity`，而且领地与当前身体位置相互独立。Vulcanus 必须先销毁与 Level 1 基地及外围一圈 chunk 重合的领地，再用 `set_territory_for_chunks(..., nil)` 永久清掉 16×16 保护区的归属；只有前一步时，之后的蓝图扩区生成会把领地重新生成回来。
 - **资源条 amount 是 uint32**：`FLUID_AMOUNT` 必须 ≤ `0xFFFFFFFF`。旧代码 `8192*1024*512 = 2^32` 溢出。
 - **资源冲突诊断不能参与执行**：`diagnose_operations` 的临时映射只用于日志，`execute_operations` 必须遍历原始操作数组；不要重新引入占位表、先到先得或冲突跳过逻辑。
 - **`item_requests` 和 `insert_plan` 是两个不同字段**（Factorio 2.1 里仍然最容易踩的陷阱）：`item_requests` 是扁平 `{name, quality, count}` 的 ReadOnly 聚合视图；`insert_plan` 才是带 `{id, items.in_inventory[]}` 结构的 per-slot 列表。要把模块 / 弹药按蓝图指定的槽位插进实体，**必须**走 `insert_plan`。旧代码读 `item_requests` 按 `BlueprintInsertPlan` 解析会静默失败（每个元素的 `.id` 都是 nil）。

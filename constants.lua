@@ -11,6 +11,9 @@ return {
     -- 蓝图完整占地之外额外清理的视觉缓冲，避免外围树冠遮住边缘建筑
     BLUEPRINT_CLEAR_MARGIN = 16,
 
+    -- Vulcanus 领地清理在 Level 1 基地 chunk 外再扩的圈数
+    TERRITORY_CLEAR_MARGIN_CHUNKS = 1,
+
     -- 固体矿每 tile 的储量（uint32 范围内）
     ORE_PER_TILE = 8192,
 

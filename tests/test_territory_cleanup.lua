@@ -32,7 +32,8 @@ return function(T)
     if not ok then return end
 
     T.equal(calls, 1, "base chunks are cleared in one API call")
-    T.equal(#cleared_chunks, 196, "448x448 base covers exactly 14x14 chunks")
+    T.equal(#cleared_chunks, 256,
+        "territory cleanup adds one chunk around the 14x14 base")
     T.equal(assigned_territory, nil, "base chunks are assigned no territory")
     T.equal(destroy_calls, 1, "overlapping territory is destroyed exactly once")
 
@@ -46,11 +47,11 @@ return function(T)
         min_y = not min_y and chunk.y or math.min(min_y, chunk.y)
         max_y = not max_y and chunk.y or math.max(max_y, chunk.y)
     end
-    T.equal(min_x, -7, "base starts at chunk x=-7")
-    T.equal(max_x, 6, "half-open base ends at chunk x=6")
-    T.equal(min_y, -7, "base starts at chunk y=-7")
-    T.equal(max_y, 6, "half-open base ends at chunk y=6")
-    T.equal(seen["7,0"], nil, "right boundary chunk is retained")
+    T.equal(min_x, -8, "territory cleanup starts one chunk left of the base")
+    T.equal(max_x, 7, "territory cleanup ends one chunk right of the base")
+    T.equal(min_y, -8, "territory cleanup starts one chunk above the base")
+    T.equal(max_y, 7, "territory cleanup ends one chunk below the base")
+    T.equal(seen["8,0"], nil, "second chunk beyond the right edge is retained")
 
     local pipeline_chunks
     local pipeline_surface = {
@@ -72,8 +73,8 @@ return function(T)
         territory_cleanup = true,
     })
     log = previous_log
-    T.equal(#pipeline_chunks, 196,
-        "clean_area pipeline permanently clears the Level 1 chunks")
+    T.equal(#pipeline_chunks, 256,
+        "clean_area pipeline clears the Level 1 chunks plus one outer ring")
 
     local planets = require("planets")
     T.equal(planets.vulcanus.territory_cleanup, true,

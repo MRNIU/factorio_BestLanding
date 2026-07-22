@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.0.3
+Date: 2026-07-23
+  Changes:
+    - Expanded Vulcanus territory cleanup by one chunk around every edge of the Level 1 base, protecting a 16x16-chunk area from Demolisher territories.
+---------------------------------------------------------------------------------------------------
 Version: 2.0.2
 Date: 2026-07-23
   Changes:

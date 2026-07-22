@@ -1,15 +1,16 @@
 -- Copyright The MRNIU/factorio_BestLanding Contributors
--- 删除与基地重合的完整领地，并把基地 chunk 永久设为无领地。
+-- 删除与基地及外围一圈 chunk 重合的完整领地，并把这些 chunk 永久设为无领地。
 
 local C = require("constants")
 
 local M = {}
 
 function M.clear_area(surface, area)
-    local left   = math.floor(area.left_top.x / C.CHUNK_SIZE)
-    local top    = math.floor(area.left_top.y / C.CHUNK_SIZE)
-    local right  = math.ceil(area.right_bottom.x / C.CHUNK_SIZE) - 1
-    local bottom = math.ceil(area.right_bottom.y / C.CHUNK_SIZE) - 1
+    local margin = C.TERRITORY_CLEAR_MARGIN_CHUNKS
+    local left   = math.floor(area.left_top.x / C.CHUNK_SIZE) - margin
+    local top    = math.floor(area.left_top.y / C.CHUNK_SIZE) - margin
+    local right  = math.ceil(area.right_bottom.x / C.CHUNK_SIZE) - 1 + margin
+    local bottom = math.ceil(area.right_bottom.y / C.CHUNK_SIZE) - 1 + margin
 
     local chunk_positions = {}
     local territories = {}
