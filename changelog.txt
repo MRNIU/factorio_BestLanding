@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.0.5
+Date: 2026-07-23
+  Changes:
+    - Fixed absolute-grid blueprints being shifted twice when their content anchor was passed back as the build position.
+    - Avoided the probe build for non-Mining layers, eliminating duplicate ghost creation for large base and power blueprints.
+---------------------------------------------------------------------------------------------------
 Version: 2.0.4
 Date: 2026-07-23
   Changes:

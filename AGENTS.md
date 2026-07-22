@@ -59,11 +59,11 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 - **`apply_blueprint.lua`** — `run(surface, opts)`。遍历 `blueprints` 表匹配 `surface.name`（小写比较）。单个蓝图流程：
   1. 临时 `game.create_inventory(1)` + `stack.import_stack(...)` + 校验 `valid_for_read and is_blueprint`。
-  2. `resolve_blueprint_content_anchor` — 只读取绝对网格吸附蓝图的 `blueprint_position_relative_to_grid`，为清理、资源推断和实际建造换算统一的内容锚点，不修改任何蓝图吸附设置。脚本版 `build_blueprint` 使用显式位置，不会执行玩家光标的网格吸附。
+  2. `resolve_blueprint_content_anchor` — 只读取绝对网格吸附蓝图的 `blueprint_position_relative_to_grid`，为静态清理和资源推断换算内容锚点，不修改任何蓝图吸附设置。`build_blueprint` 始终接收条目配置的 `pos`，由 Factorio 应用蓝图自身的绝对吸附；不能把内容锚点再次作为建造位置传入。
   3. `compute_aabb` — **把蓝图实体的完整碰撞箱和 tile 占地按最终 anchor + direction 变换到 surface 坐标**再算 AABB。不能只取实体中心，否则边缘大型建筑仍可能被清理范围外的障碍挡住。
   4. `clean.clean_blueprint_area(surface, aabb)` 清掉范围内所有非玩家、非资源障碍实体。
-  5. 第一次 `stack.build_blueprint{ build_mode = defines.build_mode.forced }` 只作为试放；根据 ghost 的真实 `bounding_box` 再清理一次实际建造范围，并用 `infer_runtime_anchor` 反推 Factorio 最终采用的内容锚点。
-  6. 删除试放产生的实体 ghost；forced 模式已经直接落下的 tile 保留，因为第二次铺相同 tile 是幂等的。
+  5. 只有 `level == 3` 的 Mining 层先调用一次 `stack.build_blueprint{ build_mode = defines.build_mode.forced }` 试放；根据 ghost 的真实 `bounding_box` 再清理一次实际建造范围，并用 `infer_runtime_anchor` 反推 Factorio 最终采用的内容锚点。L1 / L2 / L4 不需要资源推断，跳过试放以免把大型蓝图 ghost 创建并销毁两遍。
+  6. Mining 层删除试放产生的实体 ghost；forced 模式已经直接落下的 tile 保留，因为第二次铺相同 tile 是幂等的。
   7. 仅当当前条目 `level == 3` 时，`place_resources.place_blueprint_resources(...)` 使用真实内容锚点，根据统一标记和设备类型铺资源实体或地格。
   8. 用完全相同的蓝图和放置参数第二次 `build_blueprint`，在资源已经存在的情况下正式生成实体 ghost，避免创建矿物导致矿机 ghost 失效。
   9. 按说明和最终实际坐标删除 `BestLanding:resource-zone` 常量运算器 ghost；它们只作为设计标记，不属于最终基地，普通常量运算器不受影响。

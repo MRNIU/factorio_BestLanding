@@ -56,9 +56,9 @@ local function transform_pos(pos, anchor, direction)
 end
 
 -- 绝对吸附蓝图的实体坐标包含 position-relative-to-grid 偏移。这里只读取
--- 这个偏移并换算脚本放置所需的内容锚点，蓝图吸附设置本身保持原样。
--- build_blueprint 接收显式位置，不会执行玩家光标的网格吸附，所以清理、
--- 资源推断和实际建造都必须使用这个换算后的锚点。
+-- 这个偏移并换算静态清理和资源推断所需的内容锚点，蓝图吸附设置本身保持原样。
+-- build_blueprint 必须继续接收调用方配置的建造位置，让 Factorio 自己应用
+-- 绝对吸附；把内容锚点传给它会重复偏移整个蓝图。
 local function resolve_blueprint_content_anchor(stack, anchor, direction)
     local resolved = { x = anchor.x, y = anchor.y }
 
@@ -464,37 +464,38 @@ local function apply(surface, blueprint_string, anchor, direction, level)
             clean.clean_blueprint_area(surface, aabb)
         end
 
-        -- 先试放一次取得 Factorio 实际采用的坐标。forced 模式会直接铺 tile，
-        -- 但 tile 再铺一次是幂等的；实体 ghost 会在资源生成前删除并正式重建。
-        local probe_ghosts = build_blueprint_ghosts(
-            stack, surface, content_anchor, direction
-        )
-
-        local runtime_aabb = compute_runtime_aabb(probe_ghosts)
-        if runtime_aabb then
-            clean.clean_blueprint_area(surface, runtime_aabb)
-        end
-
-        local runtime_anchor = infer_runtime_anchor(
-            blueprint_entities,
-            probe_ghosts,
-            direction,
-            content_anchor
-        )
-        if runtime_anchor.x ~= content_anchor.x or runtime_anchor.y ~= content_anchor.y then
-            log(("[BestLanding] apply_blueprint: adjusted resource anchor on %s from %.1f,%.1f to %.1f,%.1f")
-                :format(
-                    surface.name,
-                    content_anchor.x,
-                    content_anchor.y,
-                    runtime_anchor.x,
-                    runtime_anchor.y
-                ))
-        end
-
-        destroy_probe_ghosts(probe_ghosts)
-
+        local runtime_anchor = content_anchor
         if level == 3 then
+            -- 只有资源层需要在正式建造前取得 Factorio 实际采用的内容锚点。
+            -- 其他层直接正式建造，避免把大型基地 ghost 创建并销毁两遍。
+            local probe_ghosts = build_blueprint_ghosts(
+                stack, surface, anchor, direction
+            )
+
+            local runtime_aabb = compute_runtime_aabb(probe_ghosts)
+            if runtime_aabb then
+                clean.clean_blueprint_area(surface, runtime_aabb)
+            end
+
+            runtime_anchor = infer_runtime_anchor(
+                blueprint_entities,
+                probe_ghosts,
+                direction,
+                content_anchor
+            )
+            if runtime_anchor.x ~= content_anchor.x or runtime_anchor.y ~= content_anchor.y then
+                log(("[BestLanding] apply_blueprint: adjusted resource anchor on %s from %.1f,%.1f to %.1f,%.1f")
+                    :format(
+                        surface.name,
+                        content_anchor.x,
+                        content_anchor.y,
+                        runtime_anchor.x,
+                        runtime_anchor.y
+                    ))
+            end
+
+            destroy_probe_ghosts(probe_ghosts)
+
             resources.place_blueprint_resources(
                 surface,
                 blueprint_entities,
@@ -511,7 +512,7 @@ local function apply(surface, blueprint_string, anchor, direction, level)
         -- 矿物已经存在后，再正式创建实体 ghost。这样矿机可以正常生成在矿物上，
         -- 同时保留蓝图中的配方、模块、过滤器、品质和连线等全部设置。
         local ghosts = build_blueprint_ghosts(
-            stack, surface, content_anchor, direction
+            stack, surface, anchor, direction
         )
 
         local marker_positions, expected_markers = collect_resource_marker_positions(
