@@ -30,7 +30,7 @@ function M.force_generate(surface, area)
 end
 
 -- 只生成 outer 区域内、inner 区域外的那一圈 chunk（即"环形"）
--- 用于 Vulcanus Demolisher 扫描扩围：inner 已经生成过了，只需要补外环。
+-- 用于普通敌人扫描扩围：inner 已经生成过了，只需要补外环。
 function M.force_generate_ring(surface, inner, outer)
     local ob = chunk_bounds(outer)
     local ib = chunk_bounds(inner)

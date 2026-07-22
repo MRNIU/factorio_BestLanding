@@ -6,4 +6,5 @@ package.path = "./?.lua;./tests/?.lua;" .. package.path
 local T = require("testlib")
 require("test_resource_zones")(T)
 require("test_place_resources")(T)
+require("test_territory_cleanup")(T)
 T.finish()

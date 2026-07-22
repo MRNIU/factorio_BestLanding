@@ -16,13 +16,7 @@ return {
 
     vulcanus = {
         default_tile = "volcanic-soil-dark",
-        enemy_cleanup = {
-            expand  = C.ENEMY_EXPAND.vulcanus,
-            filters = {
-                -- Demolisher（segmented-unit）不属于 enemy force，所以不加 force 过滤
-                { type = "segmented-unit" },
-            },
-        },
+        territory_cleanup = true,
     },
 
     gleba = {

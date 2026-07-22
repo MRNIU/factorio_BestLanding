@@ -22,7 +22,6 @@ return {
     -- 清理区外额外扩围清敌人用，0 表示不扩
     ENEMY_EXPAND = {
         nauvis   = 256, -- Biter / Spitter 巢穴 + worms
-        vulcanus = 300, -- Demolisher 领地大，需要多扩一点
         gleba    = 256, -- Pentapod nest
         fulgora  = 0,   -- 无敌人
         aquilo   = 0,   -- 无敌人

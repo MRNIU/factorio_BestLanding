@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.0.2
+Date: 2026-07-23
+  Changes:
+    - Fixed Vulcanus cleanup to destroy every Demolisher territory overlapping the exact 448x448 Level 1 base area and permanently prevent territory regeneration in its 14x14 chunks.
+---------------------------------------------------------------------------------------------------
 Version: 2.0.1
 Date: 2026-07-22
   Changes:

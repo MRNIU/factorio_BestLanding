@@ -1,8 +1,9 @@
 -- Copyright The MRNIU/factorio_BestLanding Contributors
--- 阶段 1：把降落区 (0,0) 周围 448×448 清空、刷默认地形；按星球配置再清扩围内的敌人。
+-- 阶段 1：把降落区 (0,0) 周围 448×448 清空、刷默认地形；按星球配置清敌人或领地。
 
 local C      = require("constants")
 local chunks = require("chunks")
+local territory_cleanup = require("territory_cleanup")
 
 local M = {}
 
@@ -44,7 +45,7 @@ local function purge_entities(surface, area)
     end
 end
 
--- 按 cleanup cfg 扫扩围清敌人 / Demolisher
+-- 按 cleanup cfg 扫扩围清普通敌人
 local function cleanup_enemies(surface, inner_area, cleanup)
     if not cleanup or not cleanup.expand or cleanup.expand <= 0 then return end
 
@@ -89,6 +90,9 @@ function M.run(surface, cfg)
 
     local area = center_area()
     chunks.force_generate(surface, area)
+    if cfg.territory_cleanup then
+        territory_cleanup.clear_area(surface, area)
+    end
     purge_entities(surface, area)
     cleanup_enemies(surface, area, cfg.enemy_cleanup)
     repaint(surface, area, cfg.default_tile)

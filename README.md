@@ -5,9 +5,9 @@ A Factorio 2.1 mod that cleans up the landing area and seeds blueprint-defined r
 ## Features
 
 - **Landing-area cleanup**: destroys trees, rocks, cliffs, enemies, and existing resources in a 448×448 square around (0,0), then lays a planet-appropriate buildable default tile.
-- **Per-planet enemy purge** beyond the landing square:
+- **Per-planet enemy safety** for the landing square:
   - Nauvis — 256-tile expand ring, removes biter / spitter spawners and worm turrets.
-  - Vulcanus — 300-tile expand ring, removes `segmented-unit` Demolishers whose territories would otherwise still cover the landing zone.
+  - Vulcanus — destroys every Demolisher territory overlapping the exact 448×448 Level 1 base area, then permanently prevents territory regeneration in those 14×14 chunks.
   - Gleba — 256-tile expand ring, removes pentapod nests (`unit-spawner`).
   - Fulgora / Aquilo — no enemies, no expand.
 - **Blueprint-driven resource seeding**: paired constant-combinator markers in the Mining blueprint layer declare solid resources, underground fluid sources, offshore fluid tiles, and placeable terrain tiles. Resource prototypes are resolved from mining products or tile metadata rather than planet-specific mappings. Fluid sources are seeded at `uint32` max so they effectively never run dry.
