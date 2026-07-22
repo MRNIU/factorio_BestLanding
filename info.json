@@ -1,11 +1,11 @@
 {
     "name": "BestLanding",
-    "version": "1.9.0",
+    "version": "2.0.0",
     "title": "BestLanding",
     "author": "zhihong",
     "contact": "zhihong@nzhnb.com",
     "homepage": "https://github.com/MRNIU/factorio_BestLanding",
-    "description": "Clears the landing area on every Space Age planet, seeds planet-appropriate resources, and applies a starter blueprint on arrival.",
+    "description": "Clears the landing area on every Space Age planet, seeds blueprint-defined resources, and applies a starter blueprint on arrival.",
     "factorio_version": "2.1",
     "dependencies": [
         "base >= 2.1.9",

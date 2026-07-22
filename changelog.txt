@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.0.0
+Date: 2026-07-22
+  Changes:
+    - Unified solid resources, underground fluid sources, offshore fluid tiles, and placeable terrain tiles under paired Mining-blueprint resource-zone markers.
+    - Removed planet-specific and column-based resource mappings so blueprint signals now determine resource types directly on every planet.
+    - Added generic mining-product resolution, agricultural-tower tile placement, and signal-based offshore tile resolution.
+    - Restricted starter-resource generation to the Mining blueprint layer and added diagnostics that report ambiguous blueprints without resolving their conflicts.
+---------------------------------------------------------------------------------------------------
 Version: 1.9.0
 Date: 2026-07-18
   Changes:
