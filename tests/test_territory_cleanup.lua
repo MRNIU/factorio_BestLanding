@@ -37,11 +37,8 @@ return function(T)
     T.equal(assigned_territory, nil, "base chunks are assigned no territory")
     T.equal(destroy_calls, 1, "overlapping territory is destroyed exactly once")
 
-    local seen = {}
     local min_x, max_x, min_y, max_y
     for _, chunk in ipairs(cleared_chunks) do
-        local key = chunk.x .. "," .. chunk.y
-        seen[key] = true
         min_x = not min_x and chunk.x or math.min(min_x, chunk.x)
         max_x = not max_x and chunk.x or math.max(max_x, chunk.x)
         min_y = not min_y and chunk.y or math.min(min_y, chunk.y)
@@ -51,7 +48,6 @@ return function(T)
     T.equal(max_x, 7, "territory cleanup ends one chunk right of the base")
     T.equal(min_y, -8, "territory cleanup starts one chunk above the base")
     T.equal(max_y, 7, "territory cleanup ends one chunk below the base")
-    T.equal(seen["8,0"], nil, "second chunk beyond the right edge is retained")
 
     local pipeline_chunks
     local pipeline_surface = {

@@ -28,10 +28,6 @@ return function(T)
             type = "resource",
             mineable_properties = { products = {{type = "fluid", name = "sulfuric-acid"}} },
         },
-        ["fluorine-vent"] = {
-            type = "resource",
-            mineable_properties = { products = {{type = "fluid", name = "fluorine"}} },
-        },
     }
     local item_prototypes = {
         ["iron-ore"] = { name = "iron-ore" },
@@ -110,23 +106,27 @@ return function(T)
     local _, unpaired_issues = R.collect({
         marker(10, 0, 0, "item", "iron-ore", 9),
     }, identity, entity_prototypes)
-    T.truthy(#unpaired_issues > 0, "unpaired marker is reported")
+    T.equal(unpaired_issues[1] and unpaired_issues[1].kind,
+        "invalid-marker-pair-count", "unpaired marker is reported")
 
     local multiple = marker(11, 0, 0, "item", "iron-ore", 10)
     multiple.control_behavior.sections.sections[1].filters[2] = {
         type="item", name="artificial-yumako-soil", quality="normal", count=10,
     }
     local _, multiple_issues = R.collect({multiple}, identity, entity_prototypes)
-    T.truthy(#multiple_issues > 0, "multiple filters are reported")
+    T.equal(multiple_issues[1] and multiple_issues[1].kind,
+        "invalid-marker-signal-count", "multiple filters are reported")
 
     local legendary = marker(12, 0, 0, "item", "iron-ore", 11)
     legendary.control_behavior.sections.sections[1].filters[1].quality = "legendary"
     local _, quality_issues = R.collect({legendary}, identity, entity_prototypes)
-    T.truthy(#quality_issues > 0, "non-normal quality is reported")
+    T.equal(quality_issues[1] and quality_issues[1].kind,
+        "invalid-marker-quality", "non-normal quality is reported")
 
     local zero = marker(13, 0, 0, "item", "iron-ore", 0)
     local _, count_issues = R.collect({zero}, identity, entity_prototypes)
-    T.truthy(#count_issues > 0, "non-positive zone id is reported")
+    T.equal(count_issues[1] and count_issues[1].kind,
+        "invalid-marker-zone-id", "non-positive zone id is reported")
 
     entity_prototypes["rare-spring-a"] = {
         type = "resource",
@@ -142,5 +142,6 @@ return function(T)
         ambiguous_index, item_prototypes, tile_prototypes
     )
     T.equal(ambiguous.entity_resource, nil, "ambiguous resource is unresolved")
-    T.truthy(#ambiguous_issues > 0, "ambiguous resource candidates are reported")
+    T.equal(ambiguous_issues[1] and ambiguous_issues[1].kind,
+        "ambiguous-resource", "ambiguous resource candidates are reported")
 end
