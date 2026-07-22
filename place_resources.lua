@@ -3,6 +3,7 @@
 
 local zones = require("resource_zones")
 local C = require("constants")
+local agriculture = require("agriculture")
 
 local M = {}
 
@@ -171,6 +172,8 @@ local function collect_devices(entities, transform)
                         device.position, device.direction, prototype
                     )
                     if device.area then
+                        device.radius = prototype.agricultural_tower_radius
+                        device.growth_grid_size = prototype.growth_grid_tile_size or 3
                         devices[category][#devices[category] + 1] = device
                     end
                 else
@@ -230,6 +233,7 @@ local function append_tower_tiles(operations, zone, target, devices)
                 kind = "tile-area",
                 target = target,
                 area = device.area,
+                planting_plan = agriculture.plan_for_tower(target, device),
                 device_key = device.key,
                 zone_key = key,
             }
@@ -424,6 +428,7 @@ end
 
 local function execute_operations(surface, operations)
     local failures = {}
+    local planting_plans = {}
     for _, operation in ipairs(operations) do
         if operation.kind == "tile-area" then
             local tiles = {}
@@ -433,6 +438,9 @@ local function execute_operations(surface, operations)
                 end
             end
             if #tiles > 0 then surface.set_tiles(tiles) end
+            if operation.planting_plan then
+                planting_plans[#planting_plans + 1] = operation.planting_plan
+            end
         else
             local function attempt(x, y)
                 local created = surface.create_entity{
@@ -456,6 +464,7 @@ local function execute_operations(surface, operations)
         end
     end
     log_failures(surface, failures)
+    return planting_plans
 end
 
 local function log_operation_summary(surface, operations)
@@ -498,8 +507,14 @@ function M.place_blueprint_resources(surface, entities, transform)
     end
 
     diagnose_operations(surface, operations)
-    execute_operations(surface, operations)
+    local planting_plans = execute_operations(surface, operations)
     log_operation_summary(surface, operations)
+    return planting_plans
+end
+
+-- 作物必须等正式蓝图实体全部复活、二次障碍清理结束后再创建。
+function M.plant_blueprint_crops(surface, planting_plans)
+    agriculture.plant(surface, planting_plans)
 end
 
 return M

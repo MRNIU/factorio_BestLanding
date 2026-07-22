@@ -1,10 +1,11 @@
 -- Copyright The MRNIU/factorio_BestLanding Contributors
 -- 阶段 3：把 blueprints.lua 里匹配当前 surface 的蓝图应用到降落区。
 
-local clean      = require("clean_area")
-local blueprints = require("blueprints")
-local resources  = require("place_resources")
-local Transform  = require("blueprint_transform")
+local clean       = require("clean_area")
+local blueprints  = require("blueprints")
+local resources   = require("place_resources")
+local Transform   = require("blueprint_transform")
+local agriculture = require("agriculture")
 
 local M = {}
 
@@ -199,7 +200,7 @@ local function lock_cheat_entity(entity)
 end
 
 --------------------------------------------------------------------------------
--- 初始化蓝图实体：充满电能缓冲，并为机器人指令平台补充一组常用品
+-- 初始化蓝图实体：补种子、充满电能缓冲，并为机器人指令平台补充常用品
 
 local function insert_normal_stack(entity, inventory_id, item_name)
     local inventory = entity.get_inventory(inventory_id)
@@ -229,6 +230,8 @@ local function initialize_blueprint_entity(entity)
     if buffer_size and buffer_size > 0 then
         entity.energy = buffer_size
     end
+
+    agriculture.fill_requested_seeds(entity)
 
     if entity.type ~= "roboport" then return end
 
@@ -299,6 +302,7 @@ local function apply(surface, blueprint_string, anchor, direction, level)
 
     -- 临时库存承载 BlueprintItem；pcall 保证即便中途抛错也 destroy，不泄漏
     local inventory = game.create_inventory(1)
+    local planting_plans = {}
     local ok, err = pcall(function()
         local stack = inventory[1]
 
@@ -332,7 +336,7 @@ local function apply(surface, blueprint_string, anchor, direction, level)
         end
 
         if level == 3 then
-            resources.place_blueprint_resources(
+            planting_plans = resources.place_blueprint_resources(
                 surface,
                 blueprint_entities,
                 function(entity)
@@ -341,7 +345,7 @@ local function apply(surface, blueprint_string, anchor, direction, level)
                         direction = transform.direction(entity.direction or 0),
                     }
                 end
-            )
+            ) or {}
         end
 
         -- 矿物已经存在后，再正式创建实体 ghost。这样矿机可以正常生成在矿物上，
@@ -401,7 +405,7 @@ local function apply(surface, blueprint_string, anchor, direction, level)
         log(("[BestLanding] apply_blueprint: error on %s: %s"):format(surface.name, tostring(err)))
         return false, err
     end
-    return true
+    return true, planting_plans
 end
 
 --------------------------------------------------------------------------------
@@ -416,17 +420,28 @@ function M.run(surface, opts)
     if not entries then return end
 
     local max_level = (opts and opts.max_level) or 1
+    local planting_plans = {}
     for _, bp in ipairs(entries) do
         local level = bp.level or 1
         if level <= max_level and bp.data and bp.data ~= "" then
-            apply(
+            local applied, result = apply(
                 surface,
                 bp.data,
                 bp.pos or { x = 0, y = 0 },
                 bp.direction or 0,
                 level
             )
+            if applied and type(result) == "table" then
+                for _, plan in ipairs(result) do
+                    planting_plans[#planting_plans + 1] = plan
+                end
+            end
         end
+    end
+
+    -- 后续蓝图层的障碍清理也会移除中立作物，因此必须等全部层完成后再种植。
+    if #planting_plans > 0 then
+        resources.plant_blueprint_crops(surface, planting_plans)
     end
 end
 

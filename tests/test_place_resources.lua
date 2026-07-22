@@ -21,6 +21,7 @@ return function(T)
 
     local logs = {}
     _G.log = function(message) logs[#logs + 1] = message end
+    _G.game = {forces = {neutral = {name = "neutral"}}}
     _G.prototypes = {
         entity = {
             ["constant-combinator"] = {type = "constant-combinator"},
@@ -55,6 +56,10 @@ return function(T)
         item = {
             ["iron-ore"] = {name="iron-ore"},
             ["copper-ore"] = {name="copper-ore"},
+            ["yumako-seed"] = {
+                name = "yumako-seed",
+                plant_result = lua_object{name="yumako-tree"},
+            },
             ["artificial-yumako-soil"] = {
                 name = "artificial-yumako-soil",
                 place_as_tile_result = {
@@ -136,7 +141,7 @@ return function(T)
         {entity_number=13, name="offshore-pump", position={x=33.5, y=0.5}, direction=0},
     }
     local P = require("place_resources")
-    P.place_blueprint_resources(surface, entities, identity_transform)
+    local planting_plans = P.place_blueprint_resources(surface, entities, identity_transform)
 
     T.equal(count_created(surface.created, "iron-ore"), 9,
         "radius-one drill attempts a 3x3 ore patch")
@@ -151,6 +156,11 @@ return function(T)
     T.equal(soil_bounds.bottom, 10, "agricultural soil ends at the bottom growth edge")
     T.equal(count_tiles(surface.tile_batches, "water"), 3,
         "two separated source tiles produce their minimal bounding row")
+    T.equal(#planting_plans, 1, "the soil operation returns one deferred crop plan")
+    T.equal(planting_plans[1].crop, "yumako-tree", "the deferred plan matches the soil crop")
+    P.plant_blueprint_crops(surface, planting_plans)
+    T.equal(count_created(surface.created, "yumako-tree"), 48,
+        "crop creation runs after the caller has finished building entities")
 
     local conflict_surface = {valid=true, name="nauvis", created={}, tile_batches={}}
     function conflict_surface.create_entity(params)

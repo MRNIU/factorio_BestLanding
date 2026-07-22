@@ -6,6 +6,10 @@ return function(T)
 
     local build_positions = {}
     local resource_position
+    local planting_plan = {{crop = "yumako-tree"}}
+    local planted_plans
+    local builds_when_planted
+    local supplied_entities = 0
     local blueprint_entities = {
         {entity_number = 1, name = "test-machine", position = {x = 0.5, y = 0.5}},
     }
@@ -24,6 +28,12 @@ return function(T)
                 pos = {x = 0, y = 0},
                 direction = 0,
             },
+            {
+                level = 4,
+                data = "test-production-blueprint",
+                pos = {x = 0, y = 0},
+                direction = 0,
+            },
         },
     }
     package.loaded.clean_area = {
@@ -33,6 +43,16 @@ return function(T)
         is_resource_zone_marker = function() return false end,
         place_blueprint_resources = function(_, entities, transform)
             resource_position = transform(entities[1]).position
+            return planting_plan
+        end,
+        plant_blueprint_crops = function(_, plans)
+            planted_plans = plans
+            builds_when_planted = #build_positions
+        end,
+    }
+    package.loaded.agriculture = {
+        fill_requested_seeds = function()
+            supplied_entities = supplied_entities + 1
         end,
     }
 
@@ -106,9 +126,9 @@ return function(T)
     }
 
     local surface = {valid = true, name = "gleba"}
-    require("apply_blueprint").run(surface, {max_level = 3})
+    require("apply_blueprint").run(surface, {max_level = 4})
 
-    T.equal(#build_positions, 2, "every blueprint layer builds exactly once")
+    T.equal(#build_positions, 3, "every blueprint layer builds exactly once")
     for index, position in ipairs(build_positions) do
         T.equal(position.x or position[1], 0,
             ("absolute blueprint build %d uses configured build x"):format(index))
@@ -119,4 +139,12 @@ return function(T)
         "resource transform uses the formula-derived content x")
     T.equal(resource_position.y, -186.5,
         "resource transform uses the formula-derived content y")
+    T.equal(#planted_plans, 1,
+        "the Mining blueprint contributes its deferred crop plan")
+    T.equal(planted_plans[1], planting_plan[1],
+        "deferred crop plans execute after the Mining blueprint entities are revived")
+    T.equal(builds_when_planted, 3,
+        "crop planting waits until every selected blueprint layer has finished")
+    T.equal(supplied_entities, 3,
+        "every revived blueprint entity is checked for requested seeds")
 end

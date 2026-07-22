@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.0.7
+Date: 2026-07-23
+  Changes:
+    - Planted the crop implied by each Gleba agricultural-soil marker across every available agricultural-tower growth-grid position.
+    - Filled seed requests in revived logistic containers up to their configured item, quality, section multiplier, and count.
+    - Deferred crop creation until every selected blueprint layer finishes so later obstacle cleanup cannot remove planted crops.
+---------------------------------------------------------------------------------------------------
 Version: 2.0.6
 Date: 2026-07-23
   Changes:

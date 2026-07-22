@@ -55,7 +55,9 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 - **`resource_zones.lua`** — 纯解析器。校验和配对 `BestLanding:resource-zone` 标记，按资源原型的开采产物解析 item / fluid 信号，按 `place_as_tile_result` 解析可放置地格，并按 tile 的 `fluid` 属性和两个固定别名解析离岸泵地格。它不修改 surface，也不直接写日志。
 
-- **`place_resources.lua`** — `place_blueprint_resources(surface, entities, transform)`。扫描固体矿机、原版 `pumpjack`、所有 `agricultural-tower` 和 `offshore-pump`，根据设备中心是否落在标记矩形中生成资源操作。先用临时映射汇总设备和预测占地冲突，再丢弃诊断映射并原样执行所有操作；诊断绝不去重、跳过或选择胜者。`is_resource_zone_marker` 复用 `resource_zones.is_marker`，保证放置和标记 ghost 删除使用同一识别规则。
+- **`place_resources.lua`** — `place_blueprint_resources(surface, entities, transform)`。扫描固体矿机、原版 `pumpjack`、所有 `agricultural-tower` 和 `offshore-pump`，根据设备中心是否落在标记矩形中生成资源操作。先用临时映射汇总设备和预测占地冲突，再丢弃诊断映射并原样执行所有操作；诊断绝不去重、跳过或选择胜者。农业塔地格操作同时返回延迟种植计划，交给 `apply_blueprint` 在所有选中层完成后执行。`is_resource_zone_marker` 复用 `resource_zones.is_marker`，保证放置和标记 ghost 删除使用同一识别规则。
+
+- **`agriculture.lua`** — 沃土、种子和作物的运行时衔接。六种原版玉玛果 / 果冻果土只做简单的“地格 → 种子”映射，作物实体名从种子物品的 `plant_result` 读取。按农业塔 `agricultural_tower_radius` 和 `growth_grid_tile_size` 生成种植点，跳过塔本体中心并用 `register_plant=true` 创建正常生长的作物。实体复活后读取实际 `LuaLogisticSections`，只对拥有 `plant_result` 的种子请求按品质、启用区段和 multiplier 汇总目标数，再向箱子补足缺额。
 
 - **`blueprint_transform.lua`** — 蓝图局部坐标到 surface 坐标的纯计算模块。绝对吸附逐轴使用 `offset + floor((build_position - offset) / grid_size) * grid_size` 选择 Factorio 使用的网格点，再统一旋转和平移实体、地格、资源设备及标记；相对吸附和无吸附直接使用条目 `pos`。UI 的“网格位置”已经隐含在蓝图实体 / 地格的局部坐标中，不能再额外加减。四个正交方向旋转时同步旋转绝对偏移，并在东 / 西方向交换网格宽高。
 
@@ -67,9 +69,10 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
   5. 仅当当前条目 `level == 3` 时，`place_resources.place_blueprint_resources(...)` 使用该 transform，根据统一标记和设备类型铺资源实体或地格。
   6. 每层只调用一次 `build_blueprint` 正式生成实体 ghost；仍把条目原始 `pos` 和 `direction` 交给 Factorio，使建造位置和公式使用完全相同的输入。
   7. 用同一 transform 删除 `BestLanding:resource-zone` 常量运算器 ghost；它们只作为设计标记，不属于最终基地，普通常量运算器不受影响。
-  8. 根据其余正式 ghost 的真实占地再清理一次障碍，然后逐个调用 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`；无效 ghost 和复活失败会汇总写日志。
+  8. 根据其余正式 ghost 的真实占地再清理一次障碍，然后逐个调用 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`；随后检查实体的物流区段并向箱子补足种子请求。无效 ghost 和复活失败会汇总写日志。
   9. 每个 revive 出来的实体都会把 `electric_buffer_size` 对应的电能缓冲充满；`roboport` 还会在机器人 / 材料库存中分别追加一组普通品质的建筑机器人、物流机器人和修理包。
   10. 如果 revive 出来的实体是 `infinity-container` / `infinity-pipe` / `infinity-cargo-wagon`，立刻设 `minable_flag=false`、`destructible=false`、`operable=false`、`rotatable=false`。这类蓝图里的作弊供给实体只作为只读补给源存在：玩家不能打开设置界面、旋转、拆除或破坏它们，但 inserter / 管网仍然可以从里面取物品或抽流体。
+  11. 所有不高于所选等级的蓝图层完成后，才执行 Mining 层返回的作物种植计划；否则 L4 的障碍清理会把 L3 已创建的中立作物删掉。
   - `fulfill_item_requests` — **用 `proxy.insert_plan`，不是 `proxy.item_requests`**。LuaEntity 上这两个字段格式完全不同：
     - `LuaEntity::item_requests :: ItemWithQualityCounts`（只读）—— 扁平 `[{name, quality, count}, ...]`，没有 slot 信息
     - `LuaEntity::insert_plan :: array[BlueprintInsertPlan]`（读写）—— per-slot `[{id={name, quality}, items={in_inventory=[{inventory, stack, count}, ...], grid_count?}}, ...]`
@@ -89,7 +92,7 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 - item + 固体 mining drill：按开采产物解析资源实体，铺满矿机自身采矿半径。
 - fluid + `pumpjack`：按开采产物解析地下流体资源，在抽油机中心地格创建资源。
-- item + `agricultural-tower`：读取物品的 `place_as_tile_result`，铺满农业塔工作范围。
+- item + `agricultural-tower`：读取物品的 `place_as_tile_result`，铺满农业塔工作范围；原版玉玛果 / 果冻果沃土还会通过对应种子的 `plant_result` 种植作物。
 - fluid + `offshore-pump`：按 tile 的 fluid 解析水域地格，每个区域独立包围所选泵的 source tile。
 - `heavy-oil` 固定消歧为 `oil-ocean-shallow`，`ammoniacal-solution` 固定消歧为 `ammoniacal-ocean`；这只是信号映射，不是行星规则。
 - 改 `ORE_PER_TILE` / `FLUID_AMOUNT` = 安全（只是数值，蓝图不依赖）。

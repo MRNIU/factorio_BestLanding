@@ -11,6 +11,7 @@ A Factorio 2.1 mod that cleans up the landing area and seeds blueprint-defined r
   - Gleba — 256-tile expand ring, removes pentapod nests (`unit-spawner`).
   - Fulgora / Aquilo — no enemies, no expand.
 - **Blueprint-driven resource seeding**: paired constant-combinator markers in the Mining blueprint layer declare solid resources, underground fluid sources, offshore fluid tiles, and placeable terrain tiles. Resource prototypes are resolved from mining products or tile metadata rather than planet-specific mappings. Fluid sources are seeded at `uint32` max so they effectively never run dry.
+- **Ready-to-run Gleba farms**: Yumako and jellynut soil markers also plant the corresponding crop on every available agricultural-tower growth-grid position. Seed items requested by revived logistic containers are filled to the configured request count and quality.
 - **Four-level starter bases**: each planet independently supports a basic base, a powered base that adds a power-system blueprint, a mining base that adds mining facilities, and a production base that finally adds production facilities. Higher levels cumulatively apply all lower-level layers.
 - **Starter blueprint initialization**: modules, filters, and ammo embedded in a blueprint are delivered into each revived entity via the Factorio 2.1 `insert_plan` API, so quality items land in the correct inventory slot. Every revived entity starts with a full electric energy buffer, and each roboport receives one normal-quality stack each of construction robots, logistic robots, and repair packs.
 - **Locked supply entities**: infinity containers, infinity pipes, and infinity cargo wagons embedded in starter blueprints are locked after placement so players cannot open, configure, rotate, mine, or destroy them. Inserters and fluid networks can still extract from them.
@@ -48,7 +49,7 @@ Signal meaning depends on the selected device type:
 
 - An item signal with a solid mining drill resolves a resource entity through that resource's mining products, then fills the drill's own mining radius.
 - A fluid signal with a `pumpjack` resolves an underground resource entity through its mining products, then places one source under the pumpjack.
-- An item signal with an agricultural tower resolves every item that exposes `place_as_tile_result`, then fills the tower's work area with that tile.
+- An item signal with an agricultural tower resolves every item that exposes `place_as_tile_result`, then fills the tower's work area with that tile. Yumako and jellynut soils additionally resolve their seed item's `plant_result` and plant that crop after all selected blueprint layers finish.
 - A fluid signal with an offshore pump resolves a same-name or unique fluid-bearing tile. `heavy-oil` maps to `oil-ocean-shallow`, and `ammoniacal-solution` maps to `ammoniacal-ocean`. The selected pumps' source tiles define one minimal rectangle per marker zone.
 
 Only the Mining blueprint layer is scanned for resource drivers. Basic, powered, and production layers never drive resource placement; the production setting still receives Mining resources because blueprint levels are applied cumulatively.
