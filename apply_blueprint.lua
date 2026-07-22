@@ -431,7 +431,7 @@ end
 --------------------------------------------------------------------------------
 -- 应用单个蓝图
 
-local function apply(surface, cfg, blueprint_string, anchor, direction)
+local function apply(surface, blueprint_string, anchor, direction, level)
     if not blueprint_string or blueprint_string == "" then
         return false, "empty blueprint"
     end
@@ -494,18 +494,19 @@ local function apply(surface, cfg, blueprint_string, anchor, direction)
 
         destroy_probe_ghosts(probe_ghosts)
 
-        resources.place_blueprint_resources(
-            surface,
-            cfg,
-            blueprint_entities,
-            function(entity)
-                local entity_direction = entity.direction or 0
-                return {
-                    position = transform_pos(entity.position, runtime_anchor, direction),
-                    direction = (entity_direction + direction) % 16,
-                }
-            end
-        )
+        if level == 3 then
+            resources.place_blueprint_resources(
+                surface,
+                blueprint_entities,
+                function(entity)
+                    local entity_direction = entity.direction or 0
+                    return {
+                        position = transform_pos(entity.position, runtime_anchor, direction),
+                        direction = (entity_direction + direction) % 16,
+                    }
+                end
+            )
+        end
 
         -- 矿物已经存在后，再正式创建实体 ghost。这样矿机可以正常生成在矿物上，
         -- 同时保留蓝图中的配方、模块、过滤器、品质和连线等全部设置。
@@ -570,7 +571,7 @@ end
 --------------------------------------------------------------------------------
 -- 阶段入口
 
-function M.run(surface, cfg, opts)
+function M.run(surface, opts)
     if not (surface and surface.valid) then return end
 
     -- blueprints 是 { lowercase_surface_name = { entry, entry, ... } } 结构，
@@ -582,7 +583,13 @@ function M.run(surface, cfg, opts)
     for _, bp in ipairs(entries) do
         local level = bp.level or 1
         if level <= max_level and bp.data and bp.data ~= "" then
-            apply(surface, cfg, bp.data, bp.pos or { x = 0, y = 0 }, bp.direction or 0)
+            apply(
+                surface,
+                bp.data,
+                bp.pos or { x = 0, y = 0 },
+                bp.direction or 0,
+                level
+            )
         end
     end
 end

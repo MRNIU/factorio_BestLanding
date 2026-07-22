@@ -46,7 +46,7 @@ local function run_pipeline(surface)
 
     run_stage("clean_area", clean_area.run, surface, cfg)
     if blueprints_enabled then
-        run_stage("apply_blueprint", apply_blueprint.run, surface, cfg, {
+        run_stage("apply_blueprint", apply_blueprint.run, surface, {
             max_level = base_level,
         })
     else
