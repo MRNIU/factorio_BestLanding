@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.0.6
+Date: 2026-07-23
+  Changes:
+    - Replaced blueprint-anchor patches with one grid-size, absolute-offset, build-position, and rotation transform shared by cleanup, resources, tiles, and marker removal.
+    - Removed probe builds and runtime anchor inference so every blueprint layer is built exactly once.
+---------------------------------------------------------------------------------------------------
 Version: 2.0.5
 Date: 2026-07-23
   Changes:

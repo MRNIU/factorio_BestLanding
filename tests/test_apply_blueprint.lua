@@ -60,10 +60,10 @@ return function(T)
             valid = true,
             type = "entity-ghost",
             ghost_name = "test-machine",
-            position = {x = -195.5, y = -195.5},
+            position = {x = -195.5, y = -186.5},
             bounding_box = {
-                left_top = {x = -196, y = -196},
-                right_bottom = {x = -195, y = -195},
+                left_top = {x = -196, y = -187},
+                right_bottom = {x = -195, y = -186},
             },
         }
         function ghost.destroy()
@@ -80,6 +80,7 @@ return function(T)
         valid_for_read = true,
         is_blueprint = true,
         blueprint_absolute_snapping = true,
+        blueprint_snap_to_grid = {x = 392, y = 383},
         blueprint_position_relative_to_grid = {x = 196, y = 196},
     }
     function stack.import_stack()
@@ -107,8 +108,7 @@ return function(T)
     local surface = {valid = true, name = "gleba"}
     require("apply_blueprint").run(surface, {max_level = 3})
 
-    T.equal(#build_positions, 3,
-        "basic blueprint builds once while mining blueprint probes and builds")
+    T.equal(#build_positions, 2, "every blueprint layer builds exactly once")
     for index, position in ipairs(build_positions) do
         T.equal(position.x or position[1], 0,
             ("absolute blueprint build %d uses configured build x"):format(index))
@@ -116,7 +116,7 @@ return function(T)
             ("absolute blueprint build %d uses configured build y"):format(index))
     end
     T.equal(resource_position.x, -195.5,
-        "resource transform still uses the runtime content x")
-    T.equal(resource_position.y, -195.5,
-        "resource transform still uses the runtime content y")
+        "resource transform uses the formula-derived content x")
+    T.equal(resource_position.y, -186.5,
+        "resource transform uses the formula-derived content y")
 end

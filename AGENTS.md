@@ -57,19 +57,19 @@ Factorio 2.1 Mod（`BestLanding`），用 Lua 编写。仓库本身即是部署�
 
 - **`place_resources.lua`** — `place_blueprint_resources(surface, entities, transform)`。扫描固体矿机、原版 `pumpjack`、所有 `agricultural-tower` 和 `offshore-pump`，根据设备中心是否落在标记矩形中生成资源操作。先用临时映射汇总设备和预测占地冲突，再丢弃诊断映射并原样执行所有操作；诊断绝不去重、跳过或选择胜者。`is_resource_zone_marker` 复用 `resource_zones.is_marker`，保证放置和标记 ghost 删除使用同一识别规则。
 
+- **`blueprint_transform.lua`** — 蓝图局部坐标到 surface 坐标的纯计算模块。绝对吸附逐轴使用 `offset + floor((build_position - offset) / grid_size) * grid_size` 选择 Factorio 使用的网格点，再统一旋转和平移实体、地格、资源设备及标记；相对吸附和无吸附直接使用条目 `pos`。UI 的“网格位置”已经隐含在蓝图实体 / 地格的局部坐标中，不能再额外加减。四个正交方向旋转时同步旋转绝对偏移，并在东 / 西方向交换网格宽高。
+
 - **`apply_blueprint.lua`** — `run(surface, opts)`。遍历 `blueprints` 表匹配 `surface.name`（小写比较）。单个蓝图流程：
   1. 临时 `game.create_inventory(1)` + `stack.import_stack(...)` + 校验 `valid_for_read and is_blueprint`。
-  2. `resolve_blueprint_content_anchor` — 只读取绝对网格吸附蓝图的 `blueprint_position_relative_to_grid`，为静态清理和资源推断换算内容锚点，不修改任何蓝图吸附设置。`build_blueprint` 始终接收条目配置的 `pos`，由 Factorio 应用蓝图自身的绝对吸附；不能把内容锚点再次作为建造位置传入。
-  3. `compute_aabb` — **把蓝图实体的完整碰撞箱和 tile 占地按最终 anchor + direction 变换到 surface 坐标**再算 AABB。不能只取实体中心，否则边缘大型建筑仍可能被清理范围外的障碍挡住。
+  2. 用 `blueprint_snap_to_grid`、`blueprint_absolute_snapping`、`blueprint_position_relative_to_grid`、条目 `pos` 和 `direction` 创建唯一的 `blueprint_transform`。
+  3. `compute_aabb` — **把蓝图实体的完整碰撞箱和 tile 占地用同一个 transform 换算到 surface 坐标**再算 AABB。不能只取实体中心，否则边缘大型建筑仍可能被清理范围外的障碍挡住。
   4. `clean.clean_blueprint_area(surface, aabb)` 清掉范围内所有非玩家、非资源障碍实体。
-  5. 只有 `level == 3` 的 Mining 层先调用一次 `stack.build_blueprint{ build_mode = defines.build_mode.forced }` 试放；根据 ghost 的真实 `bounding_box` 再清理一次实际建造范围，并用 `infer_runtime_anchor` 反推 Factorio 最终采用的内容锚点。L1 / L2 / L4 不需要资源推断，跳过试放以免把大型蓝图 ghost 创建并销毁两遍。
-  6. Mining 层删除试放产生的实体 ghost；forced 模式已经直接落下的 tile 保留，因为第二次铺相同 tile 是幂等的。
-  7. 仅当当前条目 `level == 3` 时，`place_resources.place_blueprint_resources(...)` 使用真实内容锚点，根据统一标记和设备类型铺资源实体或地格。
-  8. 用完全相同的蓝图和放置参数第二次 `build_blueprint`，在资源已经存在的情况下正式生成实体 ghost，避免创建矿物导致矿机 ghost 失效。
-  9. 按说明和最终实际坐标删除 `BestLanding:resource-zone` 常量运算器 ghost；它们只作为设计标记，不属于最终基地，普通常量运算器不受影响。
-  10. 根据其余正式 ghost 的真实占地再清理一次障碍，然后逐个调用 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`；无效 ghost 和复活失败会汇总写日志。
-  11. 每个 revive 出来的实体都会把 `electric_buffer_size` 对应的电能缓冲充满；`roboport` 还会在机器人 / 材料库存中分别追加一组普通品质的建筑机器人、物流机器人和修理包。
-  12. 如果 revive 出来的实体是 `infinity-container` / `infinity-pipe` / `infinity-cargo-wagon`，立刻设 `minable_flag=false`、`destructible=false`、`operable=false`、`rotatable=false`。这类蓝图里的作弊供给实体只作为只读补给源存在：玩家不能打开设置界面、旋转、拆除或破坏它们，但 inserter / 管网仍然可以从里面取物品或抽流体。
+  5. 仅当当前条目 `level == 3` 时，`place_resources.place_blueprint_resources(...)` 使用该 transform，根据统一标记和设备类型铺资源实体或地格。
+  6. 每层只调用一次 `build_blueprint` 正式生成实体 ghost；仍把条目原始 `pos` 和 `direction` 交给 Factorio，使建造位置和公式使用完全相同的输入。
+  7. 用同一 transform 删除 `BestLanding:resource-zone` 常量运算器 ghost；它们只作为设计标记，不属于最终基地，普通常量运算器不受影响。
+  8. 根据其余正式 ghost 的真实占地再清理一次障碍，然后逐个调用 `revive{ raise_revive = false, return_item_request_proxy = true }`，再走 `fulfill_item_requests`；无效 ghost 和复活失败会汇总写日志。
+  9. 每个 revive 出来的实体都会把 `electric_buffer_size` 对应的电能缓冲充满；`roboport` 还会在机器人 / 材料库存中分别追加一组普通品质的建筑机器人、物流机器人和修理包。
+  10. 如果 revive 出来的实体是 `infinity-container` / `infinity-pipe` / `infinity-cargo-wagon`，立刻设 `minable_flag=false`、`destructible=false`、`operable=false`、`rotatable=false`。这类蓝图里的作弊供给实体只作为只读补给源存在：玩家不能打开设置界面、旋转、拆除或破坏它们，但 inserter / 管网仍然可以从里面取物品或抽流体。
   - `fulfill_item_requests` — **用 `proxy.insert_plan`，不是 `proxy.item_requests`**。LuaEntity 上这两个字段格式完全不同：
     - `LuaEntity::item_requests :: ItemWithQualityCounts`（只读）—— 扁平 `[{name, quality, count}, ...]`，没有 slot 信息
     - `LuaEntity::insert_plan :: array[BlueprintInsertPlan]`（读写）—— per-slot `[{id={name, quality}, items={in_inventory=[{inventory, stack, count}, ...], grid_count?}}, ...]`

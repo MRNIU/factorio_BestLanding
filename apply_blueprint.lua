@@ -4,6 +4,7 @@
 local clean      = require("clean_area")
 local blueprints = require("blueprints")
 local resources  = require("place_resources")
+local Transform  = require("blueprint_transform")
 
 local M = {}
 
@@ -23,60 +24,9 @@ local ROBOPORT_SUPPLIES = {
     },
 }
 
---------------------------------------------------------------------------------
--- 蓝图本地坐标 → surface 坐标：先按 MapDirection 旋转，再平移 anchor
-
-local function rotate_vector(vector, direction)
-    local x, y = vector.x or vector[1], vector.y or vector[2]
-    direction = (direction or 0) % 16
-
-    -- 常用的四个正交方向保持精确值；其他方向主要用于斜向铁轨碰撞箱。
-    if direction == 0 then
-        return { x = x, y = y }
-    elseif direction == 4 then
-        return { x = -y, y = x }
-    elseif direction == 8 then
-        return { x = -x, y = -y }
-    elseif direction == 12 then
-        return { x = y, y = -x }
-    end
-
-    local angle = direction * math.pi / 8
-    local cos_angle = math.cos(angle)
-    local sin_angle = math.sin(angle)
-    return {
-        x = x * cos_angle - y * sin_angle,
-        y = x * sin_angle + y * cos_angle,
-    }
-end
-
-local function transform_pos(pos, anchor, direction)
-    local rotated = rotate_vector(pos, direction)
-    return { x = rotated.x + anchor.x, y = rotated.y + anchor.y }
-end
-
--- 绝对吸附蓝图的实体坐标包含 position-relative-to-grid 偏移。这里只读取
--- 这个偏移并换算静态清理和资源推断所需的内容锚点，蓝图吸附设置本身保持原样。
--- build_blueprint 必须继续接收调用方配置的建造位置，让 Factorio 自己应用
--- 绝对吸附；把内容锚点传给它会重复偏移整个蓝图。
-local function resolve_blueprint_content_anchor(stack, anchor, direction)
-    local resolved = { x = anchor.x, y = anchor.y }
-
-    if stack.blueprint_absolute_snapping then
-        local offset = stack.blueprint_position_relative_to_grid
-        if offset then
-            local rotated_offset = rotate_vector(offset, direction)
-            resolved.x = resolved.x - rotated_offset.x
-            resolved.y = resolved.y - rotated_offset.y
-        end
-    end
-
-    return resolved
-end
-
 -- 从蓝图 entities + tiles 的完整占地，换算出 surface 上的 AABB。
 -- 实体不能只看中心点，否则边缘大型建筑的碰撞箱会落到清理区之外。
-local function compute_aabb(entities, tiles, anchor, direction)
+local function compute_aabb(entities, tiles, transform)
     local min_x, min_y =  math.huge,  math.huge
     local max_x, max_y = -math.huge, -math.huge
 
@@ -88,7 +38,7 @@ local function compute_aabb(entities, tiles, anchor, direction)
     end
 
     local function extend_local_position(pos)
-        extend_surface_position(transform_pos(pos, anchor, direction))
+        extend_surface_position(transform.position(pos))
     end
 
     for _, entity in pairs(entities or {}) do
@@ -106,8 +56,8 @@ local function compute_aabb(entities, tiles, anchor, direction)
             -- 对碰撞箱做中心对称扩展，可安全覆盖镜像实体和非对称原型。
             local half_width = math.max(math.abs(left), math.abs(right))
             local half_height = math.max(math.abs(top), math.abs(bottom))
-            local entity_direction = ((entity.direction or 0) + (direction or 0)) % 16
-            local center = transform_pos(entity.position, anchor, direction)
+            local entity_direction = transform.direction(entity.direction or 0)
+            local center = transform.position(entity.position)
 
             for _, corner in ipairs {
                 { x = -half_width, y = -half_height },
@@ -115,7 +65,7 @@ local function compute_aabb(entities, tiles, anchor, direction)
                 { x = -half_width, y =  half_height },
                 { x =  half_width, y =  half_height },
             } do
-                local rotated = rotate_vector(corner, entity_direction)
+                local rotated = Transform.rotate_vector(corner, entity_direction)
                 extend_surface_position {
                     x = center.x + rotated.x,
                     y = center.y + rotated.y,
@@ -179,82 +129,6 @@ local function position_key(name, position)
     return name .. "@" .. x .. "," .. y
 end
 
--- 用 Factorio 实际生成的 ghost 位置反推最终内容锚点。选择出现次数最少的
--- 实体类型产生候选平移，再用全部 ghost 打分，避免依赖 build_blueprint 返回顺序。
-local function infer_runtime_anchor(blueprint_entities, ghosts, direction, fallback)
-    local relative_by_name = {}
-    for _, entity in pairs(blueprint_entities or {}) do
-        local positions = relative_by_name[entity.name]
-        if not positions then
-            positions = {}
-            relative_by_name[entity.name] = positions
-        end
-        positions[#positions + 1] = rotate_vector(entity.position, direction)
-    end
-
-    local actual_by_name = {}
-    local actual_lookup = {}
-    for _, ghost in pairs(ghosts or {}) do
-        if ghost.valid and ghost.ghost_name and ghost.position then
-            local positions = actual_by_name[ghost.ghost_name]
-            if not positions then
-                positions = {}
-                actual_by_name[ghost.ghost_name] = positions
-            end
-            positions[#positions + 1] = ghost.position
-            actual_lookup[position_key(ghost.ghost_name, ghost.position)] = true
-        end
-    end
-
-    local candidate_name
-    local candidate_cost = math.huge
-    for name, relative_positions in pairs(relative_by_name) do
-        local actual_positions = actual_by_name[name]
-        if actual_positions then
-            local cost = #relative_positions * #actual_positions
-            if cost < candidate_cost then
-                candidate_name = name
-                candidate_cost = cost
-            end
-        end
-    end
-    if not candidate_name then return fallback end
-
-    local best_anchor
-    local best_score = -1
-    local best_distance = math.huge
-    for _, relative_position in ipairs(relative_by_name[candidate_name]) do
-        for _, actual_position in ipairs(actual_by_name[candidate_name]) do
-            local candidate = {
-                x = actual_position.x - relative_position.x,
-                y = actual_position.y - relative_position.y,
-            }
-            local score = 0
-            for _, entity in pairs(blueprint_entities or {}) do
-                local rotated = rotate_vector(entity.position, direction)
-                local expected = {
-                    x = rotated.x + candidate.x,
-                    y = rotated.y + candidate.y,
-                }
-                if actual_lookup[position_key(entity.name, expected)] then
-                    score = score + 1
-                end
-            end
-
-            local dx = candidate.x - fallback.x
-            local dy = candidate.y - fallback.y
-            local distance = dx * dx + dy * dy
-            if score > best_score or (score == best_score and distance < best_distance) then
-                best_anchor = candidate
-                best_score = score
-                best_distance = distance
-            end
-        end
-    end
-
-    return best_anchor or fallback
-end
-
 local function build_blueprint_ghosts(stack, surface, anchor, direction)
     return stack.build_blueprint {
         surface         = surface,
@@ -266,27 +140,14 @@ local function build_blueprint_ghosts(stack, surface, anchor, direction)
     } or {}
 end
 
--- 第一次 build 只用于读取 Factorio 最终采用的实体位置。资源必须在正式 ghost
--- 生成前铺好，否则在 ghost 占地内创建矿物可能让矿机 ghost 失效。
-local function destroy_probe_ghosts(ghosts)
-    local destroyed = 0
-    for _, ghost in pairs(ghosts or {}) do
-        if ghost.valid and ghost.type == "entity-ghost" then
-            ghost.destroy()
-            destroyed = destroyed + 1
-        end
-    end
-    return destroyed
-end
-
 -- 资源区域常量运算器只用于声明矿机选择矩形，不属于最终基地。
--- 按最终内容锚点记录名称和位置，避免误删蓝图里的普通常量运算器。
-local function collect_resource_marker_positions(blueprint_entities, anchor, direction)
+-- 使用统一 transform 记录名称和位置，避免误删蓝图里的普通常量运算器。
+local function collect_resource_marker_positions(blueprint_entities, transform)
     local positions = {}
     local count = 0
     for _, entity in pairs(blueprint_entities or {}) do
         if resources.is_resource_zone_marker(entity) then
-            local position = transform_pos(entity.position, anchor, direction)
+            local position = transform.position(entity.position)
             local key = position_key(entity.name, position)
             positions[key] = (positions[key] or 0) + 1
             count = count + 1
@@ -450,60 +311,34 @@ local function apply(surface, blueprint_string, anchor, direction, level)
             error("stack is not a valid blueprint after import")
         end
 
-        local content_anchor = resolve_blueprint_content_anchor(stack, anchor, direction)
         local blueprint_entities = stack.get_blueprint_entities()
         local blueprint_tiles = stack.get_blueprint_tiles()
+        local transform = Transform.new {
+            build_position = anchor,
+            direction = direction,
+            snap_to_grid = stack.blueprint_snap_to_grid,
+            absolute_snapping = stack.blueprint_absolute_snapping,
+            position_relative_to_grid = stack.blueprint_position_relative_to_grid,
+        }
 
         -- 先算蓝图在 surface 上的 AABB，清掉范围内的非玩家、非资源障碍
         local aabb = compute_aabb(
             blueprint_entities,
             blueprint_tiles,
-            content_anchor, direction
+            transform
         )
         if aabb then
             clean.clean_blueprint_area(surface, aabb)
         end
 
-        local runtime_anchor = content_anchor
         if level == 3 then
-            -- 只有资源层需要在正式建造前取得 Factorio 实际采用的内容锚点。
-            -- 其他层直接正式建造，避免把大型基地 ghost 创建并销毁两遍。
-            local probe_ghosts = build_blueprint_ghosts(
-                stack, surface, anchor, direction
-            )
-
-            local runtime_aabb = compute_runtime_aabb(probe_ghosts)
-            if runtime_aabb then
-                clean.clean_blueprint_area(surface, runtime_aabb)
-            end
-
-            runtime_anchor = infer_runtime_anchor(
-                blueprint_entities,
-                probe_ghosts,
-                direction,
-                content_anchor
-            )
-            if runtime_anchor.x ~= content_anchor.x or runtime_anchor.y ~= content_anchor.y then
-                log(("[BestLanding] apply_blueprint: adjusted resource anchor on %s from %.1f,%.1f to %.1f,%.1f")
-                    :format(
-                        surface.name,
-                        content_anchor.x,
-                        content_anchor.y,
-                        runtime_anchor.x,
-                        runtime_anchor.y
-                    ))
-            end
-
-            destroy_probe_ghosts(probe_ghosts)
-
             resources.place_blueprint_resources(
                 surface,
                 blueprint_entities,
                 function(entity)
-                    local entity_direction = entity.direction or 0
                     return {
-                        position = transform_pos(entity.position, runtime_anchor, direction),
-                        direction = (entity_direction + direction) % 16,
+                        position = transform.position(entity.position),
+                        direction = transform.direction(entity.direction or 0),
                     }
                 end
             )
@@ -516,7 +351,7 @@ local function apply(surface, blueprint_string, anchor, direction, level)
         )
 
         local marker_positions, expected_markers = collect_resource_marker_positions(
-            blueprint_entities, runtime_anchor, direction
+            blueprint_entities, transform
         )
         local destroyed_markers = destroy_resource_marker_ghosts(
             ghosts, marker_positions
