@@ -35,7 +35,9 @@ return function(T)
             ["copper-ore"] = {name="copper-ore"},
             ["artificial-yumako-soil"] = {
                 name = "artificial-yumako-soil",
-                place_as_tile_result = {name="artificial-yumako-soil"},
+                place_as_tile_result = {
+                    result = {name="artificial-yumako-soil"},
+                },
             },
         },
         tile = {

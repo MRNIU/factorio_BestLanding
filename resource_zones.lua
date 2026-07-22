@@ -250,7 +250,8 @@ function M.resolve(zone, indexes, item_prototypes, tile_prototypes)
 
     if zone.signal_type == "item" then
         local item = item_prototypes[zone.signal_name]
-        targets.place_tile = prototype_name(item and item.place_as_tile_result)
+        local place_result = item and item.place_as_tile_result
+        targets.place_tile = prototype_name(place_result and place_result.result)
     elseif zone.signal_type == "fluid" then
         targets.offshore_tile = resolve_offshore_tile(
             zone.signal_name, tile_prototypes, issues
