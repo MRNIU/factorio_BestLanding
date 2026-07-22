@@ -78,6 +78,40 @@ local function rotate_vector(vector, direction)
     return {x = x, y = y}
 end
 
+local function agricultural_area(position, direction, prototype)
+    local collision_box = prototype.collision_box
+    local radius = prototype.agricultural_tower_radius
+    if not (collision_box and radius) then return nil end
+
+    local corners = {
+        {x = collision_box.left_top.x, y = collision_box.left_top.y},
+        {x = collision_box.right_bottom.x, y = collision_box.left_top.y},
+        {x = collision_box.left_top.x, y = collision_box.right_bottom.y},
+        {x = collision_box.right_bottom.x, y = collision_box.right_bottom.y},
+    }
+    local left, right, top, bottom
+    for _, corner in ipairs(corners) do
+        local rotated = rotate_vector(corner, direction)
+        left = left and math.min(left, rotated.x) or rotated.x
+        right = right and math.max(right, rotated.x) or rotated.x
+        top = top and math.min(top, rotated.y) or rotated.y
+        bottom = bottom and math.max(bottom, rotated.y) or rotated.y
+    end
+
+    local growth_grid_size = prototype.growth_grid_tile_size or 3
+    local extension = radius * growth_grid_size
+    return {
+        left_top = {
+            x = math.floor(position.x + left - extension),
+            y = math.floor(position.y + top - extension),
+        },
+        right_bottom = {
+            x = math.ceil(position.x + right + extension),
+            y = math.ceil(position.y + bottom + extension),
+        },
+    }
+end
+
 local function offshore_source_tile(device)
     local prototype = prototypes.entity[device.name]
     local offset = prototype and prototype.fluid_source_offset
@@ -133,8 +167,10 @@ local function collect_devices(entities, transform)
                         devices[category][#devices[category] + 1] = device
                     end
                 elseif category == "agricultural_towers" then
-                    device.radius = prototype.agricultural_tower_radius
-                    if device.radius then
+                    device.area = agricultural_area(
+                        device.position, device.direction, prototype
+                    )
+                    if device.area then
                         devices[category][#devices[category] + 1] = device
                     end
                 else
@@ -193,7 +229,7 @@ local function append_tower_tiles(operations, zone, target, devices)
             operations[#operations + 1] = {
                 kind = "tile-area",
                 target = target,
-                area = area_around(device.position, device.radius),
+                area = device.area,
                 device_key = device.key,
                 zone_key = key,
             }

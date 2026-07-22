@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.0.4
+Date: 2026-07-23
+  Changes:
+    - Fixed agricultural-tower terrain placement to cover the complete growth grid derived from the rotated collision box, agricultural radius, and growth-grid tile size.
+---------------------------------------------------------------------------------------------------
 Version: 2.0.3
 Date: 2026-07-23
   Changes:

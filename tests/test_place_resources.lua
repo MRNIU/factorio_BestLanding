@@ -29,7 +29,15 @@ return function(T)
                 get_mining_drill_radius = function() return 1 end,
             },
             pumpjack = {type = "mining-drill"},
-            ["agricultural-tower"] = {type = "agricultural-tower", agricultural_tower_radius = 1},
+            ["agricultural-tower"] = {
+                type = "agricultural-tower",
+                agricultural_tower_radius = 3,
+                growth_grid_tile_size = 3,
+                collision_box = {
+                    left_top = {x = -1.2, y = -1.2},
+                    right_bottom = {x = 1.2, y = 1.2},
+                },
+            },
             ["offshore-pump"] = {type = "offshore-pump", fluid_source_offset = {x = 0, y = -1}},
             ["iron-ore"] = {
                 type = "resource",
@@ -96,6 +104,21 @@ return function(T)
         end
         return count
     end
+    local function tile_bounds(batches, name)
+        local bounds = {}
+        for _, batch in ipairs(batches) do
+            for _, tile in ipairs(batch) do
+                if tile.name == name then
+                    local x, y = tile.position[1], tile.position[2]
+                    bounds.left = bounds.left and math.min(bounds.left, x) or x
+                    bounds.right = bounds.right and math.max(bounds.right, x) or x
+                    bounds.top = bounds.top and math.min(bounds.top, y) or y
+                    bounds.bottom = bounds.bottom and math.max(bounds.bottom, y) or y
+                end
+            end
+        end
+        return bounds
+    end
 
     local entities = {
         marker(1, -2, -2, "item", "iron-ore", 1),
@@ -119,8 +142,13 @@ return function(T)
         "radius-one drill attempts a 3x3 ore patch")
     T.equal(count_created(surface.created, "crude-oil"), 1,
         "pumpjack attempts one fluid resource")
-    T.equal(count_tiles(surface.tile_batches, "artificial-yumako-soil"), 9,
-        "radius-one agricultural tower sets a 3x3 tile patch")
+    T.equal(count_tiles(surface.tile_batches, "artificial-yumako-soil"), 441,
+        "agricultural tower covers its full 21x21 growth grid")
+    local soil_bounds = tile_bounds(surface.tile_batches, "artificial-yumako-soil")
+    T.equal(soil_bounds.left, 1, "agricultural soil starts at the left growth edge")
+    T.equal(soil_bounds.right, 21, "agricultural soil ends at the right growth edge")
+    T.equal(soil_bounds.top, -10, "agricultural soil starts at the top growth edge")
+    T.equal(soil_bounds.bottom, 10, "agricultural soil ends at the bottom growth edge")
     T.equal(count_tiles(surface.tile_batches, "water"), 3,
         "two separated source tiles produce their minimal bounding row")
 
