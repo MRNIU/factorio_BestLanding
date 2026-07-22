@@ -15,12 +15,11 @@ end
 
 local function fluid_name(tile)
     local fluid = tile and tile.fluid
-    return type(fluid) == "table" and fluid.name or fluid
+    return fluid and fluid.name
 end
 
 local function prototype_name(prototype)
-    if type(prototype) == "table" then return prototype.name end
-    return prototype
+    return prototype and prototype.name
 end
 
 local function marker_number(entity)

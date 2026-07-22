@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.0.1
+Date: 2026-07-22
+  Changes:
+    - Fixed LuaObject prototype-name resolution so offshore-pump water, lava, and ocean tiles plus agricultural-tower terrain tiles are generated from marker signals.
+---------------------------------------------------------------------------------------------------
 Version: 2.0.0
 Date: 2026-07-22
   Changes:

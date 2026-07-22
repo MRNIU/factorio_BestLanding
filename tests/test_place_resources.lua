@@ -5,6 +5,20 @@ return function(T)
     package.loaded.place_resources = nil
     package.loaded.resource_zones = nil
 
+    -- 用非 table 对象模拟 Factorio LuaObject 的属性访问。
+    local object_fields = setmetatable({}, {__mode = "k"})
+    local object_metatable = {
+        __index = function(object, key)
+            return object_fields[object][key]
+        end,
+    }
+    local function lua_object(fields)
+        local object = coroutine.create(function() end)
+        object_fields[object] = fields
+        debug.setmetatable(object, object_metatable)
+        return object
+    end
+
     local logs = {}
     _G.log = function(message) logs[#logs + 1] = message end
     _G.prototypes = {
@@ -36,12 +50,12 @@ return function(T)
             ["artificial-yumako-soil"] = {
                 name = "artificial-yumako-soil",
                 place_as_tile_result = {
-                    result = {name="artificial-yumako-soil"},
+                    result = lua_object{name="artificial-yumako-soil"},
                 },
             },
         },
         tile = {
-            water = {name="water", fluid={name="water"}},
+            water = {name="water", fluid=lua_object{name="water"}},
         },
     }
 

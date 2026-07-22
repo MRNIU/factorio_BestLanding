@@ -4,6 +4,20 @@
 return function(T)
     local R = require("resource_zones")
 
+    -- 用非 table 对象模拟 Factorio LuaObject 的属性访问。
+    local object_fields = setmetatable({}, {__mode = "k"})
+    local object_metatable = {
+        __index = function(object, key)
+            return object_fields[object][key]
+        end,
+    }
+    local function lua_object(fields)
+        local object = coroutine.create(function() end)
+        object_fields[object] = fields
+        debug.setmetatable(object, object_metatable)
+        return object
+    end
+
     local entity_prototypes = {
         ["constant-combinator"] = { type = "constant-combinator" },
         ["iron-ore"] = {
@@ -24,17 +38,18 @@ return function(T)
         ["artificial-yumako-soil"] = {
             name = "artificial-yumako-soil",
             place_as_tile_result = {
-                result = { name = "artificial-yumako-soil" },
+                result = lua_object{name = "artificial-yumako-soil"},
             },
         },
     }
     local tile_prototypes = {
-        water = { name = "water", fluid = { name = "water" } },
-        deepwater = { name = "deepwater", fluid = { name = "water" } },
-        ["oil-ocean-deep"] = { name = "oil-ocean-deep", fluid = { name = "heavy-oil" } },
-        ["oil-ocean-shallow"] = { name = "oil-ocean-shallow", fluid = { name = "heavy-oil" } },
-        ["ammoniacal-ocean"] = { name = "ammoniacal-ocean", fluid = { name = "ammoniacal-solution" } },
-        ["ammoniacal-ocean-2"] = { name = "ammoniacal-ocean-2", fluid = { name = "ammoniacal-solution" } },
+        water = { name = "water", fluid = lua_object{name = "water"} },
+        deepwater = { name = "deepwater", fluid = lua_object{name = "water"} },
+        lava = { name = "lava", fluid = lua_object{name = "lava"} },
+        ["oil-ocean-deep"] = { name = "oil-ocean-deep", fluid = lua_object{name = "heavy-oil"} },
+        ["oil-ocean-shallow"] = { name = "oil-ocean-shallow", fluid = lua_object{name = "heavy-oil"} },
+        ["ammoniacal-ocean"] = { name = "ammoniacal-ocean", fluid = lua_object{name = "ammoniacal-solution"} },
+        ["ammoniacal-ocean-2"] = { name = "ammoniacal-ocean-2", fluid = lua_object{name = "ammoniacal-solution"} },
     }
 
     local function marker(number, x, y, signal_type, name, count)
@@ -79,6 +94,10 @@ return function(T)
     local water = R.resolve({signal_type="fluid", signal_name="water"},
         index, item_prototypes, tile_prototypes)
     T.equal(water.offshore_tile, "water", "same-name fluid tile wins")
+
+    local lava = R.resolve({signal_type="fluid", signal_name="lava"},
+        index, item_prototypes, tile_prototypes)
+    T.equal(lava.offshore_tile, "lava", "LuaObject fluid name resolves lava tile")
 
     local oil = R.resolve({signal_type="fluid", signal_name="heavy-oil"},
         index, item_prototypes, tile_prototypes)
